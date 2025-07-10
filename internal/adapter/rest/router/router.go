@@ -6,7 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	_ "keeplo/docs" // 반드시 swag init 후 docs 디렉토리를 import
+
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func Run(ctx context.Context) {
@@ -33,6 +37,9 @@ func Run(ctx context.Context) {
 		MaxHeaderBytes:    1 << 20,
 	}
 
+	// swagger
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	if err := srv.ListenAndServe(); err != nil {
 		panic(err)
 	}
@@ -45,10 +52,13 @@ func Run(ctx context.Context) {
 func registerUserHandler(api *gin.RouterGroup) {
 	auth := api.Group("/auth")
 
-	auth.POST("/signup", handler.SingupHandler)   // 회원가입
-	auth.POST("/login", handler.LoginHandler)     // 로그인
-	auth.GET("/me", handler.GetUserHandler)       // 로그인 정보 조회
-	auth.DELETE("/logout", handler.LogoutHandler) // 로그아웃
+	auth.POST("/signup", handler.SignupHandler)          // 회원가입
+	auth.POST("/login", handler.LoginHandler)            // 로그인
+	auth.GET("/me/:id", handler.GetUserInfoHandler)      // 로그인 정보 조회
+	auth.PUT("me/:id", handler.UpdateUserInfoHandler)    // 사용자 정보 수정
+	auth.DELETE("/me/:id/logout", handler.LogoutHandler) // 로그아웃
+	auth.DELETE("/me/:id/resign", handler.ReSignHandler) // 회원 탈퇴 요청
+	auth.GET("/duplicate", handler.DuplicateEmail)       // 이메일 중복 검사
 }
 
 func registerMonitorHandler(api *gin.RouterGroup) {

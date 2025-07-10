@@ -1,0 +1,230 @@
+basePath: /api/v1
+definitions:
+  dto.CheckPasswordRequest:
+    properties:
+      password:
+        type: string
+    type: object
+  dto.DuplicateEmailRequest:
+    properties:
+      email:
+        type: string
+    type: object
+  dto.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  dto.ResponseFormat:
+    properties:
+      data: {}
+      error_code:
+        type: integer
+      error_message:
+        type: string
+      message:
+        type: string
+    type: object
+  dto.SignupRequest:
+    properties:
+      check_password:
+        type: string
+      email:
+        type: string
+      nickname:
+        type: string
+      password:
+        type: string
+    type: object
+host: 10.30.8.25:8888
+info:
+  contact: {}
+  description: keeplo
+  title: keeplo API
+  version: "0.1"
+paths:
+  /api/v1/auth/me/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 사용자 정보 조회
+      parameters:
+      - description: 사용자 고유 번호
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 사용자 정보
+      tags:
+      - auth
+    put:
+      consumes:
+      - application/json
+      description: 사용자 정보 수정 요청
+      parameters:
+      - in: path
+        name: check_password
+        type: string
+      - in: path
+        name: nickname
+        type: string
+      - in: path
+        name: password
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 사용자 정보 수정
+      tags:
+      - auth
+  /api/v1/auth/me/{id}/logout:
+    delete:
+      consumes:
+      - application/json
+      description: 로그아웃 요청
+      parameters:
+      - description: 사용자 고유번호
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 로그아웃
+      tags:
+      - auth
+  /api/v1/auth/me/{id}/resign:
+    delete:
+      consumes:
+      - application/json
+      description: 회원탈퇴 요청
+      parameters:
+      - description: 사용자 고유번호
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 회원탈퇴
+      tags:
+      - auth
+  /api/v1/auth/signup:
+    post:
+      consumes:
+      - application/json
+      description: 로그인 요청
+      parameters:
+      - description: 로그인 사용자 정보
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 로그인
+      tags:
+      - auth
+  /api/v1/paste/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 이메일 중복 체크 요청
+      parameters:
+      - description: 이메일
+        in: body
+        name: email
+        required: true
+        schema:
+          $ref: '#/definitions/dto.DuplicateEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 이메일 중복 체크
+      tags:
+      - auth
+    post:
+      consumes:
+      - application/json
+      description: 비밀번호 확인 요청
+      parameters:
+      - description: Paste update Content
+        in: body
+        name: paste
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CheckPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 비밀번호 확인
+      tags:
+      - auth
+schemes:
+- http
+swagger: "2.0"
