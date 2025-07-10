@@ -52,23 +52,24 @@ func Run(ctx context.Context) {
 func registerUserHandler(api *gin.RouterGroup) {
 	auth := api.Group("/auth")
 
-	auth.POST("/signup", handler.SignupHandler)          // 회원가입
-	auth.POST("/login", handler.LoginHandler)            // 로그인
-	auth.GET("/me/:id", handler.GetUserInfoHandler)      // 로그인 정보 조회
-	auth.PUT("me/:id", handler.UpdateUserInfoHandler)    // 사용자 정보 수정
-	auth.DELETE("/me/:id/logout", handler.LogoutHandler) // 로그아웃
-	auth.DELETE("/me/:id/resign", handler.ReSignHandler) // 회원 탈퇴 요청
-	auth.GET("/duplicate", handler.DuplicateEmail)       // 이메일 중복 검사
+	auth.POST("/signup", handler.SignupHandler)      // 회원가입
+	auth.POST("/login", handler.LoginHandler)        // 로그인
+	auth.GET("/me/", handler.GetUserInfoHandler)     // 로그인 정보 조회
+	auth.PUT("me/", handler.UpdateUserInfoHandler)   // 사용자 정보 수정
+	auth.DELETE("/me/logout", handler.LogoutHandler) // 로그아웃
+	auth.DELETE("/me/resign", handler.ReSignHandler) // 회원 탈퇴 요청
+	auth.GET("/duplicate", handler.DuplicateEmail)   // 이메일 중복 검사
+	auth.POST("/password", handler.CheckPassword)    // 비밀번호 검사
 }
 
 func registerMonitorHandler(api *gin.RouterGroup) {
 	monitor := api.Group("/monitor")
 
-	monitor.GET("", handler.GetMonitorHandler)          // 모니터링 주소 정보 조회
-	monitor.PUT("", handler.UpdateMonitorHandler)       // 모니터링 주소 정보 수정
-	monitor.POST("", handler.RegisterMonitorHandler)    // 모니터링 주소 추가
-	monitor.DELETE("", handler.RemoveMonitorHandler)    // 모니터링 주소 삭제
-	monitor.GET("/list", handler.GetMonitorListHandler) // 모니터링 주소 목록 조회
+	monitor.GET("/:id", handler.GetMonitorHandler)       // 모니터링 주소 정보 조회
+	monitor.PUT("/:id", handler.UpdateMonitorHandler)    // 모니터링 주소 정보 수정
+	monitor.POST("", handler.RegisterMonitorHandler)     // 모니터링 주소 추가
+	monitor.DELETE("/:id", handler.RemoveMonitorHandler) // 모니터링 주소 삭제
+	monitor.GET("/list", handler.GetMonitorListHandler)  // 모니터링 주소 목록 조회
 }
 
 func registerLogHandler(api *gin.RouterGroup) {

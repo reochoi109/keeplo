@@ -31,7 +31,7 @@ func SignupHandler(c *gin.Context) {
 //	@Param			user	body		dto.LoginRequest	true	"로그인 사용자 정보"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/auth/signup [post]
+//	@Router			/api/v1/auth/login [post]
 func LoginHandler(c *gin.Context) {
 	response.HandleResponse(c, 200, 200, gin.H{"message ": "LoginHandler"})
 }
@@ -46,7 +46,7 @@ func LoginHandler(c *gin.Context) {
 //	@Param			id	path		string	true	"사용자 고유 번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/auth/me/{id} [get]
+//	@Router			/api/v1/auth/me [get]
 func GetUserInfoHandler(c *gin.Context) {
 	response.HandleResponse(c, 200, 200, gin.H{"message ": "GetUserInfoHandler"})
 }
@@ -61,7 +61,7 @@ func GetUserInfoHandler(c *gin.Context) {
 //	@Param			id	path		dto.UpdateUserInfoRequest	true	"사용자 수정 정보"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/auth/me/{id} [put]
+//	@Router			/api/v1/auth/me [put]
 func UpdateUserInfoHandler(c *gin.Context) {
 	response.HandleResponse(c, 200, 200, gin.H{"message ": "UpdateUserInfoHandler"})
 }
@@ -76,7 +76,7 @@ func UpdateUserInfoHandler(c *gin.Context) {
 //	@Param			id	path		string	true	"사용자 고유번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/auth/me/{id}/logout [delete]
+//	@Router			/api/v1/auth/me/logout [delete]
 func LogoutHandler(c *gin.Context) {
 	response.HandleResponse(c, 200, 200, gin.H{"message ": "LogoutHandler"})
 }
@@ -91,7 +91,7 @@ func LogoutHandler(c *gin.Context) {
 //	@Param			id	path		string	true	"사용자 고유번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/auth/me/{id}/resign [delete]
+//	@Router			/api/v1/auth/me/resign [delete]
 func ReSignHandler(c *gin.Context) {
 	response.HandleResponse(c, 204, 200, gin.H{"message ": "ReSignHandler"})
 }
@@ -106,22 +106,22 @@ func ReSignHandler(c *gin.Context) {
 //	@Param			email	body		dto.DuplicateEmailRequest	true	"이메일"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/paste/{id} [get]
+//	@Router			/api/v1/auth/duplicate [get]
 func DuplicateEmail(c *gin.Context) {
 	response.HandleResponse(c, 200, 200, gin.H{"message ": "DuplicateEmail"})
 }
 
 // CheckPassword godoc
 //
-//	@Summary		비밀번호 확인
+//	@Summary		비밀번호 확인 요청
 //	@Description	비밀번호 확인 요청
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			paste	body		dto.CheckPasswordRequest	true	"Paste update Content"
+//	@Param			password	body	dto.CheckPasswordRequest	true	"비밀번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/paste/{id} [post]
+//	@Router			/api/v1/auth/password [post]
 func CheckPassword(c *gin.Context) {
 	response.HandleResponse(c, 200, 200, gin.H{"message ": "CheckPassword"})
 }

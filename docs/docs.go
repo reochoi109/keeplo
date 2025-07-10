@@ -15,7 +15,87 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/v1/auth/me/{id}": {
+        "/api/v1/auth/duplicate": {
+            "get": {
+                "description": "이메일 중복 체크 요청",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "이메일 중복 체크",
+                "parameters": [
+                    {
+                        "description": "이메일",
+                        "name": "email",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.DuplicateEmailRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/login": {
+            "post": {
+                "description": "로그인 요청",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "로그인",
+                "parameters": [
+                    {
+                        "description": "로그인 사용자 정보",
+                        "name": "user",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/me": {
             "get": {
                 "description": "사용자 정보 조회",
                 "consumes": [
@@ -97,7 +177,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/auth/me/{id}/logout": {
+        "/api/v1/auth/me/logout": {
             "delete": {
                 "description": "로그아웃 요청",
                 "consumes": [
@@ -135,7 +215,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/auth/me/{id}/resign": {
+        "/api/v1/auth/me/resign": {
             "delete": {
                 "description": "회원탈퇴 요청",
                 "consumes": [
@@ -173,9 +253,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/auth/signup": {
+        "/api/v1/auth/password": {
             "post": {
-                "description": "로그인 요청",
+                "description": "비밀번호 확인 요청",
                 "consumes": [
                     "application/json"
                 ],
@@ -185,15 +265,15 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "로그인",
+                "summary": "비밀번호 확인 요청",
                 "parameters": [
                     {
-                        "description": "로그인 사용자 정보",
-                        "name": "user",
+                        "description": "비밀번호",
+                        "name": "password",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.LoginRequest"
+                            "$ref": "#/definitions/dto.CheckPasswordRequest"
                         }
                     }
                 ],
@@ -213,9 +293,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/paste/{id}": {
-            "get": {
-                "description": "이메일 중복 체크 요청",
+        "/api/v1/auth/signup": {
+            "post": {
+                "description": "회원 가입 요청",
                 "consumes": [
                     "application/json"
                 ],
@@ -225,15 +305,165 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "이메일 중복 체크",
+                "summary": "회원 가입",
                 "parameters": [
                     {
-                        "description": "이메일",
-                        "name": "email",
+                        "description": "가입 사용자 정보",
+                        "name": "user",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.DuplicateEmailRequest"
+                            "$ref": "#/definitions/dto.SignupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/monitor": {
+            "get": {
+                "description": "사용자가 등록한 모니터링 목록 조회",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "모니터링 목록",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "모니터링 추가 요청",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "모니터링 추가",
+                "parameters": [
+                    {
+                        "description": "신규 모니터링",
+                        "name": "monitor",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RegisterMonitorRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/monitor/{id}": {
+            "get": {
+                "description": "사용자가 등록한 모니터링 상세 정보 조회",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "상세 모니터링 정보",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터링 고유 번호",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "모니터링 상세 정보 업데이트 요청",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "모니터링 상세 정보 업데이트",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터링 고유 번호",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "모니터링 업데이트 정보",
+                        "name": "monitor",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateMonitorRequest"
                         }
                     }
                 ],
@@ -252,8 +482,8 @@ const docTemplate = `{
                     }
                 }
             },
-            "post": {
-                "description": "비밀번호 확인 요청",
+            "delete": {
+                "description": "모니터링 삭제 요청",
                 "consumes": [
                     "application/json"
                 ],
@@ -261,18 +491,16 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "monitor"
                 ],
-                "summary": "비밀번호 확인",
+                "summary": "모니터링 삭제",
                 "parameters": [
                     {
-                        "description": "Paste update Content",
-                        "name": "paste",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.CheckPasswordRequest"
-                        }
+                        "type": "string",
+                        "description": "모니터링 고유 번호",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -320,6 +548,20 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.RegisterMonitorRequest": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.ResponseFormat": {
             "type": "object",
             "properties": {
@@ -348,6 +590,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.UpdateMonitorRequest": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "port": {
                     "type": "string"
                 }
             }
