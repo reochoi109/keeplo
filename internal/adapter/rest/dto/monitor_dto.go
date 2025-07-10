@@ -1,5 +1,7 @@
 package dto
 
+// Request --------------------------------------
+
 type RegisterMonitorRequest struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
@@ -11,3 +13,5 @@ type UpdateMonitorRequest struct {
 	Address string `json:"address"`
 	Port    string `json:"port"`
 }
+
+// Response --------------------------------------

@@ -1,5 +1,6 @@
 package dto
 
+// Request --------------------------------------
 type SignupRequest struct {
 	Email         string `json:"email"`
 	NickName      string `json:"nickname"`
@@ -25,3 +26,5 @@ type DuplicateEmailRequest struct {
 type CheckPasswordRequest struct {
 	Password string `json:"password"`
 }
+
+// Response --------------------------------------
