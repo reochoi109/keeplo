@@ -5,23 +5,23 @@ import (
 	"time"
 )
 
-// task
-
-// in memory
-
-// scheduler
-
-// monitoring check function
-
-// register function
+type Executor interface {
+	Execute(ctx context.Context) error
+}
 
 type Task struct {
-	MonitorID   string
+	ID          string
+	Executor    Executor
 	NextCheckAt time.Time
+	Interval    time.Duration
+	Index       int
 }
 
 type TaskQueue interface {
 	Push(task *Task) error
 	Pop(ctx context.Context) (*Task, error)
+	UpdateTask(ID string, newTime time.Time) error
+	RemoveTask(ID string)
 	Length() int
+	Close()
 }
