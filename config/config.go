@@ -77,6 +77,7 @@ func get(key, def string) string {
 	return def
 }
 
+// Data Source Name
 func (d DBConfig) DSN() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
