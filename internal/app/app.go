@@ -4,6 +4,7 @@ import (
 	"context"
 	"keeplo/config"
 	"keeplo/internal/adapter/rest/router"
+	"keeplo/pkg/db/postgresql"
 	"keeplo/pkg/logging"
 
 	"go.uber.org/zap"
@@ -12,6 +13,7 @@ import (
 func Run() {
 	config.Init()
 	logging.Init()
+	postgresql.Init()
 
 	logging.Log.Debug("Initializing service",
 		zap.String("service mode", config.AppConfig.Mode),
