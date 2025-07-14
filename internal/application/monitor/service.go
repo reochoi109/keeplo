@@ -2,7 +2,9 @@ package monitor
 
 import (
 	"context"
+	"fmt"
 	"keeplo/internal/domain/monitor"
+	"keeplo/internal/scheduler"
 	"time"
 )
 
@@ -19,6 +21,13 @@ func (m *monitorService) RegisterMonitor(ctx context.Context) {
 	defer cancel()
 	// 스케줄러 등록
 
+	// 예시: 모니터 엔티티 생성
+	monitorID := "monitor-123"
+	interval := time.Minute * 1
+
+	if err := scheduler.RegisterTask(ctx, monitorID, interval); err != nil {
+		fmt.Println("스케줄 등록 실패:", err)
+	}
 	// db저장
 
 	// 완료
@@ -66,4 +75,9 @@ func (m *monitorService) DeleteMonitor(ctx context.Context) {
 	// 모니터 정보 확인
 
 	// 삭제 완료
+}
+
+func (m *monitorService) CurrentMonitorInfo(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, monitorTimout)
+	defer cancel()
 }

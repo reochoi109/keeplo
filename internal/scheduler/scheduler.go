@@ -6,32 +6,34 @@ import (
 	"time"
 )
 
-type Scheduler struct {
+type scheduler struct {
 	queue TaskQueue
 }
 
-func NewScheduler(queue TaskQueue) *Scheduler {
-	return &Scheduler{
+var Scheduler *scheduler
+
+func NewScheduler(queue TaskQueue) {
+	Scheduler = &scheduler{
 		queue: queue,
 	}
 }
 
-func (s *Scheduler) RegisterTask(ctx context.Context, id string, interval time.Duration) error {
+func RegisterTask(ctx context.Context, id string, interval time.Duration) error {
 	task := &Task{
 		ID:          id,
 		NextCheckAt: time.Now().Add(interval),
 		Interval:    interval,
 	}
 
-	if err := s.queue.Push(task); err != nil {
-		return s.queue.UpdateTask(id, task.NextCheckAt)
+	if err := Scheduler.queue.Push(task); err != nil {
+		return Scheduler.queue.UpdateTask(id, task.NextCheckAt)
 	}
 	return nil
 }
 
-func (s *Scheduler) Start(ctx context.Context) {
+func Start(ctx context.Context) {
 	for {
-		task, err := s.queue.Pop(ctx)
+		task, err := Scheduler.queue.Pop(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				fmt.Println("service closing...")
@@ -41,11 +43,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		go s.handleTask(ctx, task)
+		go handleTask(ctx, task)
 	}
 }
 
-func (s *Scheduler) handleTask(ctx context.Context, task *Task) {
+func handleTask(ctx context.Context, task *Task) {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("Recovered from panic in task:", r)
@@ -60,13 +62,13 @@ func (s *Scheduler) handleTask(ctx context.Context, task *Task) {
 	// ing....
 
 	// 재등록 (Push → 중복 시 Update)
-	err := s.queue.Push(&Task{
+	err := Scheduler.queue.Push(&Task{
 		ID:          task.ID,
 		NextCheckAt: next,
 		Interval:    task.Interval,
 	})
 	if err != nil {
-		if updateErr := s.queue.UpdateTask(task.ID, next); updateErr != nil {
+		if updateErr := Scheduler.queue.UpdateTask(task.ID, next); updateErr != nil {
 			fmt.Printf("[ERROR] Failed to update task %s: %v\n", task.ID, updateErr)
 		}
 	}
