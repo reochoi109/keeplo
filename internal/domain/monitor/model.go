@@ -1,21 +1,20 @@
 package monitor
 
-import "time"
+import (
+	"time"
 
-type URLMonitor struct {
-	ID          string
-	UserID      string
-	Name        string
-	Protocol    string // 예: "http"
-	Address     string
-	Interval    int // 초 단위
-	LastChecked time.Time
-}
+	"github.com/google/uuid"
+)
 
-type CheckHistory struct {
-	MonitorID   string
-	Status      string
-	ErrorDetail string
-	Timestamp   time.Time
-	ResponseMs  int64
+type Monitor struct {
+	ID              uuid.UUID `gorm:"type:uuid;primaryKey"`
+	UserID          uuid.UUID `gorm:"type:uuid;not null;index"`
+	Name            string    `gorm:"not null"`
+	Target          string    `gorm:"not null"`
+	Type            string    `gorm:"not null"` // HTTP, WS, TCP
+	IntervalSeconds int       `gorm:"not null;default:60"`
+	Enabled         bool      `gorm:"default:true"`
+	LastCheckedAt   *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }

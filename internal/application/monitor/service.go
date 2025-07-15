@@ -4,31 +4,50 @@ import (
 	"context"
 	"fmt"
 	"keeplo/internal/domain/monitor"
+	"keeplo/internal/domain/user"
 	"keeplo/internal/scheduler"
 	"time"
 )
 
 const monitorTimout = time.Second * 5
 
-type MonitorService interface{}
-
-type monitorService struct {
-	repo monitor.Repository
+type MonitorService interface {
+	RegisterMonitor(ctx context.Context, userID string)
+	SearchMonitorList(ctx context.Context)
+	SearchMonitor(ctx context.Context)
+	ModifyMonitor(ctx context.Context)
+	DeleteMonitor(ctx context.Context)
+	CurrentMonitorInfo(ctx context.Context)
 }
 
-func (m *monitorService) RegisterMonitor(ctx context.Context) {
+type monitorService struct {
+	monitorRepo monitor.Repository
+	userRepo    user.Repository
+}
+
+func NewMonitorService(mRepo monitor.Repository, uRepo user.Repository) MonitorService {
+	return &monitorService{
+		monitorRepo: mRepo,
+		userRepo:    uRepo,
+	}
+}
+
+func (m *monitorService) RegisterMonitor(ctx context.Context, userID string) {
 	ctx, cancel := context.WithTimeout(ctx, monitorTimout)
 	defer cancel()
-	// 스케줄러 등록
+
+	// 사용자 검증
 
 	// 예시: 모니터 엔티티 생성
 	monitorID := "monitor-123"
 	interval := time.Minute * 1
 
+	// db저장
+
+	// 스케줄러 등록
 	if err := scheduler.RegisterTask(ctx, monitorID, interval); err != nil {
 		fmt.Println("스케줄 등록 실패:", err)
 	}
-	// db저장
 
 	// 완료
 }
