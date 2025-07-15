@@ -2,9 +2,11 @@ package router
 
 import (
 	"context"
+	"keeplo/internal/adapter/repository/monitor_repo"
 	"keeplo/internal/adapter/repository/user_repo"
 	"keeplo/internal/adapter/rest/handler"
 	"keeplo/internal/adapter/rest/middleware"
+	"keeplo/internal/application/monitor"
 	"keeplo/internal/application/user"
 	"keeplo/pkg/db/postgresql"
 	"net/http"
@@ -28,9 +30,11 @@ func Run(ctx context.Context) {
 	// https
 
 	// --- TEMP
-	repo := user_repo.NewGormUserRepo(postgresql.GetDB())
-	service := user.NewUserService(repo)
-	handlerService := handler.NewHandler(service)
+	userRepo := user_repo.NewGormUserRepo(postgresql.GetDB())
+	monitorRepo := monitor_repo.NewGormMonitorRepo(postgresql.GetDB())
+	userService := user.NewUserService(userRepo)
+	monitorService := monitor.NewMonitorService(monitorRepo, userRepo)
+	handlerService := handler.NewHandler(userService, monitorService)
 	// --- TEMP
 
 	api.GET("/me", middleware.AuthMiddleware(), func(c *gin.Context) {
@@ -43,7 +47,7 @@ func Run(ctx context.Context) {
 	})
 
 	registerUserHandler(api, handlerService)
-	registerMonitorHandler(api)
+	registerMonitorHandler(api, handlerService)
 	registerLogHandler(api)
 
 	srv := &http.Server{
@@ -78,14 +82,14 @@ func registerUserHandler(api *gin.RouterGroup, handlerService *handler.Handler) 
 	auth.GET("/duplicate", handlerService.DuplicateEmail)                                // 이메일 중복 검사
 }
 
-func registerMonitorHandler(api *gin.RouterGroup) {
+func registerMonitorHandler(api *gin.RouterGroup, handlerService *handler.Handler) {
 	monitor := api.Group("/monitor")
 
-	monitor.GET("/:id", handler.GetMonitorHandler)       // 모니터링 주소 정보 조회
-	monitor.PUT("/:id", handler.UpdateMonitorHandler)    // 모니터링 주소 정보 수정
-	monitor.POST("", handler.RegisterMonitorHandler)     // 모니터링 주소 추가
-	monitor.DELETE("/:id", handler.RemoveMonitorHandler) // 모니터링 주소 삭제
-	monitor.GET("/list", handler.GetMonitorListHandler)  // 모니터링 주소 목록 조회
+	monitor.GET("/:id", handlerService.GetMonitorHandler)       // 모니터링 주소 정보 조회
+	monitor.PUT("/:id", handlerService.UpdateMonitorHandler)    // 모니터링 주소 정보 수정
+	monitor.POST("", handlerService.RegisterMonitorHandler)     // 모니터링 주소 추가
+	monitor.DELETE("/:id", handlerService.RemoveMonitorHandler) // 모니터링 주소 삭제
+	monitor.GET("/list", handlerService.GetMonitorListHandler)  // 모니터링 주소 목록 조회
 }
 
 func registerLogHandler(api *gin.RouterGroup) {

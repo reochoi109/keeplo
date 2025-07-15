@@ -73,6 +73,19 @@ func (r *GormMonitorRepo) HardDelete(ctx context.Context, id string) error {
 		Delete(&MonitorGorm{}).Error
 }
 
+func (r *GormMonitorRepo) Update(ctx context.Context, m *monitor.Monitor) error {
+	return r.db.WithContext(ctx).
+		Model(&MonitorGorm{}).
+		Where("id = ?", m.ID).
+		Updates(MonitorGorm{
+			Name:            m.Name,
+			Type:            m.Type,
+			Target:          m.Target,
+			IntervalSeconds: m.IntervalSeconds,
+			UpdatedAt:       m.UpdatedAt,
+		}).Error
+}
+
 func toEntity(m *MonitorGorm) *monitor.Monitor {
 	return &monitor.Monitor{
 		ID:              m.ID,
