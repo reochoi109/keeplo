@@ -3,6 +3,7 @@ package handler
 import (
 	"keeplo/internal/adapter/rest/dto"
 	"keeplo/internal/adapter/rest/middleware"
+	"keeplo/internal/adapter/rest/response"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -24,22 +25,21 @@ import (
 func (h *Handler) RegisterMonitorHandler(c *gin.Context) {
 	var req dto.RegisterMonitorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"요청형식 오류": err})
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"인증 실패": nil})
+		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized, nil)
 		return
 	}
 
 	if err := h.MonitorService.RegisterMonitor(c.Request.Context(), userID.(string), req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"모니터 등록 실패": err})
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorRegisterFailed, nil)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"등록 완료": nil})
+	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorRegistered, nil)
 }
 
 // GetMonitorListHandler godoc
@@ -55,19 +55,21 @@ func (h *Handler) RegisterMonitorHandler(c *gin.Context) {
 func (h *Handler) GetMonitorListHandler(c *gin.Context) {
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"인증 실패": nil})
+		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
 		return
 	}
+
 	monitors, err := h.MonitorService.SearchMonitorList(c.Request.Context(), userID.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"모니터 조회 실패": err})
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
 		return
 	}
+
 	var list []dto.MonitorResponse
 	for _, m := range monitors {
 		list = append(list, dto.ToMonitorResponse(m))
 	}
-	c.JSON(http.StatusOK, list)
+	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorListed, list)
 }
 
 // GetMonitorHandler godoc
@@ -84,18 +86,17 @@ func (h *Handler) GetMonitorListHandler(c *gin.Context) {
 func (h *Handler) GetMonitorHandler(c *gin.Context) {
 	_, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"인증 실패": nil})
+		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
 		return
 	}
 	id := c.Param("id")
 
 	m, err := h.MonitorService.SearchMonitor(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"monitor search fail": err})
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorFetchFailed, nil)
 		return
 	}
-	res := dto.ToMonitorResponse(m)
-	c.JSON(200, gin.H{"message": res})
+	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorFetched, dto.ToMonitorResponse(m))
 }
 
 // UpdateMonitorHandler godoc
@@ -113,22 +114,22 @@ func (h *Handler) GetMonitorHandler(c *gin.Context) {
 func (h *Handler) UpdateMonitorHandler(c *gin.Context) {
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"인증 실패 ": nil})
+		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
 		return
 	}
 	id := c.Param("id")
-
 	var req dto.UpdateMonitorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
 	err := h.MonitorService.ModifyMonitor(c.Request.Context(), id, userID.(string), req)
 	if err != nil {
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorUpdateFailed, nil)
 		return
 	}
-
-	c.JSON(200, gin.H{"message": "UpdateMonitorHandler"})
+	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorUpdated, nil)
 }
 
 // RemoveMonitorHandler godoc
@@ -145,13 +146,14 @@ func (h *Handler) UpdateMonitorHandler(c *gin.Context) {
 func (h *Handler) RemoveMonitorHandler(c *gin.Context) {
 	_, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"인증실패": nil})
+		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
 		return
 	}
-	id := c.Param("id")
 
+	id := c.Param("id")
 	if err := h.MonitorService.DeleteMonitor(c.Request.Context(), id); err != nil {
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorDeleteFailed, nil)
 		return
 	}
-	c.JSON(200, gin.H{"message": "success"})
+	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorDeleted, nil)
 }
