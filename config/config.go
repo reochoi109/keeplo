@@ -45,7 +45,7 @@ func Init() {
 
 	AppConfig = Config{
 		Mode:       mode,
-		Port:       get("PORT", ":8080"),
+		Port:       get("PORT", ":8081"),
 		UseTLS:     get("USE_TLS", "false") == "true",
 		Debug:      get("DEBUG", "false") == "true",
 		LogLevel:   get("LOG_LEVEL", "info"),

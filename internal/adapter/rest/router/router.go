@@ -2,7 +2,11 @@ package router
 
 import (
 	"context"
+	"keeplo/internal/adapter/repository/user_repo"
 	"keeplo/internal/adapter/rest/handler"
+	"keeplo/internal/adapter/rest/middleware"
+	"keeplo/internal/application/user"
+	"keeplo/pkg/db/postgresql"
 	"net/http"
 	"time"
 
@@ -23,7 +27,22 @@ func Run(ctx context.Context) {
 
 	// https
 
-	registerUserHandler(api)
+	// --- TEMP
+	repo := user_repo.NewGormUserRepo(postgresql.GetDB())
+	service := user.NewUserService(repo)
+	handlerService := handler.NewHandler(service)
+	// --- TEMP
+
+	api.GET("/me", middleware.AuthMiddleware(), func(c *gin.Context) {
+		userID, ok := c.Get(middleware.ContextUserIDKey)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"user_id": userID})
+	})
+
+	registerUserHandler(api, handlerService)
 	registerMonitorHandler(api)
 	registerLogHandler(api)
 
@@ -43,23 +62,20 @@ func Run(ctx context.Context) {
 	if err := srv.ListenAndServe(); err != nil {
 		panic(err)
 	}
-
-	// https server
-	// srv.ListenAndServeTLS(certFile string, keyFile string)
-
 }
 
-func registerUserHandler(api *gin.RouterGroup) {
+func registerUserHandler(api *gin.RouterGroup, handlerService *handler.Handler) {
 	auth := api.Group("/auth")
 
-	auth.POST("/signup", handler.SignupHandler)      // 회원가입
-	auth.POST("/login", handler.LoginHandler)        // 로그인
-	auth.GET("/me/", handler.GetUserInfoHandler)     // 로그인 정보 조회
-	auth.PUT("me/", handler.UpdateUserInfoHandler)   // 사용자 정보 수정
-	auth.DELETE("/me/logout", handler.LogoutHandler) // 로그아웃
-	auth.DELETE("/me/resign", handler.ReSignHandler) // 회원 탈퇴 요청
-	auth.GET("/duplicate", handler.DuplicateEmail)   // 이메일 중복 검사
-	auth.POST("/password", handler.CheckPassword)    // 비밀번호 검사
+	auth.POST("/signup", handlerService.SignupHandler)                              // 회원가입
+	auth.POST("/login", handlerService.LoginHandler)                                // 로그인
+	auth.GET("/me", middleware.AuthMiddleware(), handlerService.GetUserInfoHandler) // 로그인 정보 조회
+	auth.PUT("/me/nickname", middleware.AuthMiddleware(), handlerService.UpdateNicknameHandler)
+	auth.PUT("/me/password", middleware.AuthMiddleware(), handlerService.UpdatePasswordHandler)
+	auth.DELETE("/me/logout", middleware.AuthMiddleware(), handlerService.LogoutHandler) // 로그아웃
+	auth.DELETE("/me/resign", middleware.AuthMiddleware(), handlerService.ReSignHandler) // 회원 탈퇴 요청
+	auth.POST("/password", middleware.AuthMiddleware(), handlerService.CheckPassword)    // 비밀번호 검사
+	auth.GET("/duplicate", handlerService.DuplicateEmail)                                // 이메일 중복 검사
 }
 
 func registerMonitorHandler(api *gin.RouterGroup) {

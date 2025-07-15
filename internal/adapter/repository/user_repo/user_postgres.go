@@ -1,4 +1,4 @@
-package user
+package user_repo
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 )
 
 type UserGorm struct {
-	ID           uuid.UUID `gorm:"type:uuid;primaryKey"`
-	Email        string    `gorm:"unique;not null"`
-	PasswordHash string    `gorm:"not null"`
-	IsActive     bool      `gorm:"default:true"`
-	IsDeleted    bool      `gorm:"default:false"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID           uuid.UUID `gorm:"column:id"`
+	Email        string    `gorm:"column:email"`
+	PasswordHash string    `gorm:"column:password_hash"`
+	IsActive     bool      `gorm:"column:is_active"`
+	IsDeleted    bool      `gorm:"column:is_deleted"`
+	CreatedAt    time.Time `gorm:"column:created_at"`
+	UpdatedAt    time.Time `gorm:"column:updated_at"`
 }
 
 type GormUserRepo struct {
@@ -27,8 +27,19 @@ func NewGormUserRepo(db *gorm.DB) user.Repository {
 	return &GormUserRepo{db: db}
 }
 
+func (UserGorm) TableName() string {
+	return "users"
+}
+
 func (r *GormUserRepo) Create(ctx context.Context, u *user.User) error {
 	return r.db.WithContext(ctx).Create(toGorm(u)).Error
+}
+
+func (r *GormUserRepo) Update(ctx context.Context, u *user.User) error {
+	return r.db.WithContext(ctx).
+		Model(&UserGorm{}).
+		Where("id = ?", u.ID).
+		Updates(toGorm(u)).Error
 }
 
 // 탈퇴한 사용자 포함하여 이메일 중복 여부 확인

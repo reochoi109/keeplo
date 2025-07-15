@@ -1,6 +1,8 @@
 package handler
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+)
 
 // RegisterMonitorHandler godoc
 //
@@ -12,7 +14,7 @@ import "github.com/gin-gonic/gin"
 //	@Param			monitor	body		dto.RegisterMonitorRequest	true	"신규 모니터링"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/monitor [post]
+//	@Router			/monitor [post]
 func RegisterMonitorHandler(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "RegisterMonitorHandler"})
 }
@@ -26,7 +28,7 @@ func RegisterMonitorHandler(c *gin.Context) {
 //	@Produce		json
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/monitor [get]
+//	@Router			/monitor [get]
 func GetMonitorListHandler(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "GetMonitorListHandler"})
 }
@@ -41,7 +43,7 @@ func GetMonitorListHandler(c *gin.Context) {
 //	@Param			id 		path 		string 			true 	"모니터링 고유 번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/monitor/{id} [get]
+//	@Router			/monitor/{id} [get]
 func GetMonitorHandler(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "GetMonitorHandler"})
 }
@@ -57,7 +59,7 @@ func GetMonitorHandler(c *gin.Context) {
 //	@Param			monitor body 		dto.UpdateMonitorRequest  true "모니터링 업데이트 정보"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/monitor/{id} [put]
+//	@Router			/monitor/{id} [put]
 func UpdateMonitorHandler(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "UpdateMonitorHandler"})
 }
@@ -72,7 +74,7 @@ func UpdateMonitorHandler(c *gin.Context) {
 //	@Param			id 		path 		string 				      true "모니터링 고유 번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
-//	@Router			/api/v1/monitor/{id} [delete]
+//	@Router			/monitor/{id} [delete]
 func RemoveMonitorHandler(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "RemoveMonitorHandler"})
 }

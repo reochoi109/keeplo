@@ -4,17 +4,33 @@ definitions:
     properties:
       password:
         type: string
+    required:
+    - password
     type: object
   dto.DuplicateEmailRequest:
     properties:
       email:
         type: string
+    required:
+    - email
     type: object
   dto.LoginRequest:
     properties:
       email:
         type: string
       password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  dto.LoginResponse:
+    properties:
+      email:
+        type: string
+      token:
+        type: string
+      user_id:
         type: string
     type: object
   dto.RegisterMonitorRequest:
@@ -43,9 +59,17 @@ definitions:
       email:
         type: string
       nickname:
+        maxLength: 20
+        minLength: 2
         type: string
       password:
+        minLength: 8
         type: string
+    required:
+    - check_password
+    - email
+    - nickname
+    - password
     type: object
   dto.UpdateMonitorRequest:
     properties:
@@ -56,6 +80,26 @@ definitions:
       port:
         type: string
     type: object
+  dto.UpdateNicknameRequest:
+    properties:
+      nickname:
+        maxLength: 20
+        minLength: 2
+        type: string
+    required:
+    - nickname
+    type: object
+  dto.UpdatePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        minLength: 8
+        type: string
+    required:
+    - current_password
+    - new_password
+    type: object
 host: 10.30.8.25:8888
 info:
   contact: {}
@@ -63,7 +107,7 @@ info:
   title: keeplo API
   version: "0.1"
 paths:
-  /api/v1/auth/duplicate:
+  /auth/duplicate:
     get:
       consumes:
       - application/json
@@ -89,7 +133,7 @@ paths:
       summary: 이메일 중복 체크
       tags:
       - auth
-  /api/v1/auth/login:
+  /auth/login:
     post:
       consumes:
       - application/json
@@ -107,7 +151,12 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/dto.ResponseFormat'
+            allOf:
+            - $ref: '#/definitions/dto.ResponseFormat'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.LoginResponse'
+              type: object
         "400":
           description: Bad Request
           schema:
@@ -115,7 +164,7 @@ paths:
       summary: 로그인
       tags:
       - auth
-  /api/v1/auth/me:
+  /auth/me:
     get:
       consumes:
       - application/json
@@ -140,35 +189,7 @@ paths:
       summary: 사용자 정보
       tags:
       - auth
-    put:
-      consumes:
-      - application/json
-      description: 사용자 정보 수정 요청
-      parameters:
-      - in: path
-        name: check_password
-        type: string
-      - in: path
-        name: nickname
-        type: string
-      - in: path
-        name: password
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/dto.ResponseFormat'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/dto.ResponseFormat'
-      summary: 사용자 정보 수정
-      tags:
-      - auth
-  /api/v1/auth/me/logout:
+  /auth/me/logout:
     delete:
       consumes:
       - application/json
@@ -193,7 +214,59 @@ paths:
       summary: 로그아웃
       tags:
       - auth
-  /api/v1/auth/me/resign:
+  /auth/me/nickname:
+    put:
+      consumes:
+      - application/json
+      description: 사용자의 닉네임을 변경합니다.
+      parameters:
+      - description: 닉네임 변경 요청
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateNicknameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 닉네임 변경
+      tags:
+      - auth
+  /auth/me/password:
+    put:
+      consumes:
+      - application/json
+      description: 사용자의 비밀번호를 변경합니다.
+      parameters:
+      - description: 비밀번호 변경 요청
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdatePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ResponseFormat'
+      summary: 비밀번호 변경
+      tags:
+      - auth
+  /auth/me/resign:
     delete:
       consumes:
       - application/json
@@ -218,7 +291,7 @@ paths:
       summary: 회원탈퇴
       tags:
       - auth
-  /api/v1/auth/password:
+  /auth/password:
     post:
       consumes:
       - application/json
@@ -244,7 +317,7 @@ paths:
       summary: 비밀번호 확인 요청
       tags:
       - auth
-  /api/v1/auth/signup:
+  /auth/signup:
     post:
       consumes:
       - application/json
@@ -270,7 +343,7 @@ paths:
       summary: 회원 가입
       tags:
       - auth
-  /api/v1/monitor:
+  /monitor:
     get:
       consumes:
       - application/json
@@ -314,7 +387,7 @@ paths:
       summary: 모니터링 추가
       tags:
       - monitor
-  /api/v1/monitor/{id}:
+  /monitor/{id}:
     delete:
       consumes:
       - application/json

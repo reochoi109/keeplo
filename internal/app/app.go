@@ -4,6 +4,7 @@ import (
 	"context"
 	"keeplo/config"
 	"keeplo/internal/adapter/rest/router"
+	"keeplo/pkg/auth"
 	"keeplo/pkg/db/postgresql"
 	"keeplo/pkg/logger"
 	"os"
@@ -17,6 +18,7 @@ func Run() {
 	config.Init()
 	logger.Init()
 	postgresql.Init()
+	auth.Init()
 
 	logger.Log.Debug("Initializing service",
 		zap.String("service mode", config.AppConfig.Mode),
@@ -28,7 +30,7 @@ func Run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go listenForShutdown(cancel)
+	// go listenForShutdown(cancel)
 	start(ctx)
 }
 
