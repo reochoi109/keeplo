@@ -40,6 +40,8 @@ const (
 	ErrorUserNotFound       StatusCode = 4201
 	ErrorEmailAlreadyExists StatusCode = 4202
 	ErrorPasswordMismatch   StatusCode = 4203
+	ErrorInactiveAccount    StatusCode = 4204
+	ErrorInvalidCredentials StatusCode = 4205
 
 	// Auth & Rate Limit (4400~)
 	ErrorUnauthorized      StatusCode = 4400
@@ -83,6 +85,8 @@ var messageMap = map[StatusCode]string{
 	ErrorUserNotFound:         "해당 사용자를 찾을 수 없습니다.",
 	ErrorEmailAlreadyExists:   "이미 사용 중인 이메일입니다.",
 	ErrorPasswordMismatch:     "비밀번호가 일치하지 않습니다.",
+	ErrorInactiveAccount:      "비활성화된 계정입니다. 관리자에게 문의해주세요.",
+	ErrorInvalidCredentials:   "이메일 또는 비밀번호가 올바르지 않습니다.",
 
 	// Auth / Rate Limit
 	ErrorUnauthorized:      "인증이 필요합니다.",

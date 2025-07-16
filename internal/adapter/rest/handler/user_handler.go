@@ -1,16 +1,17 @@
 package handler
 
 import (
+	"errors"
 	"keeplo/internal/adapter/rest/dto"
 	"keeplo/internal/adapter/rest/middleware"
 	"keeplo/internal/adapter/rest/response"
+	"keeplo/internal/domain/user"
 	"keeplo/pkg/auth"
 	"keeplo/pkg/logger"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // SignupHandler godoc
@@ -30,23 +31,26 @@ func (h *Handler) SignupHandler(c *gin.Context) {
 
 	var req dto.SignupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Warn("SignupHandler - invalid request body", zap.Error(err))
+		log.Warn("SignupHandler - invalid request", zap.Error(err))
 		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	log.Debug("SignupHandler called [Start]", zap.String("email", req.Email))
-	defer log.Debug("SignupHandler [End]", zap.String("email", req.Email))
-
-	user, err := h.UserService.RegisterUser(ctx, req.Email, req.Password)
+	u, err := h.UserService.RegisterUser(ctx, req.Email, req.Password)
 	if err != nil {
-		log.Warn("Signup failed", zap.String("email", req.Email), zap.Error(err))
-		response.HandleResponse(c, http.StatusBadRequest, response.ErrorEmailAlreadyExists, nil)
+		switch {
+		case errors.Is(err, user.ErrEmailAlreadyExists):
+			response.HandleResponse(c, http.StatusBadRequest, response.ErrorEmailAlreadyExists, nil)
+		case errors.Is(err, user.ErrInvalidCredentials):
+			response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
+		default:
+			log.Error("SignupHandler - unexpected error", zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+		}
 		return
 	}
 
-	log.Info("Signup success", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
-	response.HandleResponse(c, http.StatusOK, response.SuccessUserRegistered, dto.NewUserResponse(user.ID.String(), user.Email))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserRegistered, dto.NewUserResponse(u.ID.String(), u.Email))
 }
 
 // LoginHandler godoc
@@ -67,7 +71,7 @@ func (h *Handler) LoginHandler(c *gin.Context) {
 
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Warn("LoginHandler - invalid request body", zap.Error(err))
+		log.Warn("LoginHandler - invalid request", zap.Error(err))
 		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
@@ -75,22 +79,31 @@ func (h *Handler) LoginHandler(c *gin.Context) {
 	log.Debug("LoginHandler called [Start]", zap.String("email", req.Email))
 	defer log.Debug("LoginHandler [End]", zap.String("email", req.Email))
 
-	user, err := h.UserService.LoginUser(ctx, req.Email, req.Password)
+	userObj, err := h.UserService.LoginUser(ctx, req.Email, req.Password)
 	if err != nil {
-		log.Warn("Login failed - user not found", zap.String("email", req.Email), zap.Error(err))
-		response.HandleResponse(c, http.StatusBadRequest, response.ErrorUserNotFound, nil)
+		switch {
+		case errors.Is(err, user.ErrUserNotFound):
+			response.HandleResponse(c, http.StatusBadRequest, response.ErrorUserNotFound, nil)
+		case errors.Is(err, user.ErrInactiveAccount):
+			response.HandleResponse(c, http.StatusUnauthorized, response.ErrorInactiveAccount, nil)
+		case errors.Is(err, user.ErrInvalidCredentials):
+			response.HandleResponse(c, http.StatusUnauthorized, response.ErrorInvalidCredentials, nil)
+		default:
+			log.Error("LoginHandler - unexpected error", zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+		}
 		return
 	}
 
-	token, err := auth.GenerateToken(user.ID.String())
+	token, err := auth.GenerateToken(userObj.ID.String())
 	if err != nil {
-		log.Error("Token generation failed", zap.String("user_id", user.ID.String()), zap.Error(err))
+		log.Error("LoginHandler - token generation failed", zap.Error(err))
 		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
 		return
 	}
 
-	log.Info("Login success", zap.String("user_id", user.ID.String()), zap.String("email", req.Email))
-	response.HandleResponse(c, http.StatusOK, response.SuccessUserLoggedIn, dto.NewLoginResponse(token, user.ID.String(), req.Email))
+	log.Info("Login success", zap.String("user_id", userObj.ID.String()), zap.String("email", req.Email))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserLoggedIn, dto.NewLoginResponse(token, userObj.ID.String(), req.Email))
 }
 
 // GetUserInfoHandler godoc
@@ -112,15 +125,20 @@ func (h *Handler) GetUserInfoHandler(c *gin.Context) {
 	log.Debug("GetUserInfoHandler called [Start]", zap.String("user_id", userID))
 	defer log.Debug("GetUserInfoHandler [End]", zap.String("user_id", userID))
 
-	user, err := h.UserService.FindByID(ctx, userID)
+	u, err := h.UserService.FindByID(ctx, userID)
 	if err != nil {
-		log.Warn("User not found", zap.String("user_id", userID), zap.Error(err))
-		response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
+		if errors.Is(err, user.ErrUserNotFound) {
+			log.Warn("User not found", zap.String("user_id", userID), zap.Error(err))
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
+		} else {
+			log.Error("GetUserInfoHandler - unexpected error", zap.String("user_id", userID), zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+		}
 		return
 	}
 
-	log.Info("User info fetched", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
-	response.HandleResponse(c, http.StatusOK, response.SuccessUserFetched, dto.NewUserResponse(user.ID.String(), user.Email))
+	log.Info("User info fetched", zap.String("user_id", u.ID.String()), zap.String("email", u.Email))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserFetched, dto.NewUserResponse(u.ID.String(), u.Email))
 }
 
 // UpdateNicknameHandler godoc
@@ -150,9 +168,17 @@ func (h *Handler) UpdateNicknameHandler(c *gin.Context) {
 	log.Debug("UpdateNicknameHandler called [Start]", zap.String("user_id", userID), zap.String("nickname", req.NickName))
 	defer log.Debug("UpdateNicknameHandler [End]", zap.String("user_id", userID))
 
-	if err := h.UserService.UpdateNickname(ctx, userID, req.NickName); err != nil {
-		log.Error("Nickname update failed", zap.String("user_id", userID), zap.Error(err))
-		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+	err := h.UserService.UpdateNickname(ctx, userID, req.NickName)
+	if err != nil {
+		switch {
+		case errors.Is(err, user.ErrNicknameRequired):
+			log.Warn("Nickname is required", zap.String("user_id", userID), zap.Error(err))
+			response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
+
+		default:
+			log.Error("Nickname update failed", zap.String("user_id", userID), zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+		}
 		return
 	}
 
@@ -189,8 +215,19 @@ func (h *Handler) UpdatePasswordHandler(c *gin.Context) {
 
 	err := h.UserService.UpdatePassword(ctx, userID, req.CurrentPassword, req.NewPassword)
 	if err != nil {
-		log.Warn("Password update failed - current password mismatch", zap.String("user_id", userID), zap.Error(err))
-		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorPasswordMismatch, nil)
+		switch {
+		case errors.Is(err, user.ErrPasswordMismatch):
+			log.Warn("Current password mismatch", zap.String("user_id", userID))
+			response.HandleResponse(c, http.StatusUnauthorized, response.ErrorPasswordMismatch, nil)
+
+		case errors.Is(err, user.ErrUserNotFound):
+			log.Warn("User not found", zap.String("user_id", userID))
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
+
+		default:
+			log.Error("Password update failed", zap.String("user_id", userID), zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+		}
 		return
 	}
 
@@ -224,9 +261,10 @@ func (h *Handler) LogoutHandler(c *gin.Context) {
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Success		200		{object}	dto.ResponseFormat
-//	@Failure		400		{object}	dto.ResponseFormat
-//	@Failure		401		{object}	dto.ResponseFormat
+//	@Success		200	{object}	dto.ResponseFormat
+//	@Failure		401	{object}	dto.ResponseFormat
+//	@Failure		404	{object}	dto.ResponseFormat
+//	@Failure		500	{object}	dto.ResponseFormat
 //	@Router			/auth/me/resign [delete]
 func (h *Handler) ReSignHandler(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -238,8 +276,19 @@ func (h *Handler) ReSignHandler(c *gin.Context) {
 
 	err := h.UserService.DeleteUser(ctx, userID)
 	if err != nil {
-		log.Error("User deletion failed", zap.String("user_id", userID), zap.Error(err))
-		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+		switch {
+		case errors.Is(err, user.ErrUserNotFound):
+			log.Warn("User not found", zap.String("user_id", userID))
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
+
+		case errors.Is(err, user.ErrAlreadyDeleted):
+			log.Warn("User already deleted", zap.String("user_id", userID))
+			response.HandleResponse(c, http.StatusBadRequest, response.ErrorBadRequest, nil)
+
+		default:
+			log.Error("User deletion failed", zap.String("user_id", userID), zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
+		}
 		return
 	}
 
@@ -255,7 +304,7 @@ func (h *Handler) ReSignHandler(c *gin.Context) {
 //	@Accept			json
 //	@Produce		json
 //	@Param			email	body	dto.DuplicateEmailRequest	true	"중복 확인할 이메일"
-//	@Success		200		{object}	dto.ResponseFormat{data=map[string]bool}
+//	@Success		200		{object}	dto.ResponseFormat{data=bool}
 //	@Failure		400		{object}	dto.ResponseFormat
 //	@Failure		500		{object}	dto.ResponseFormat
 //	@Router			/auth/duplicate [get]
@@ -275,8 +324,15 @@ func (h *Handler) DuplicateEmail(c *gin.Context) {
 
 	exists, err := h.UserService.CheckDuplicateEmail(ctx, req.Email)
 	if err != nil {
-		log.Error("Email check failed", zap.String("email", req.Email), zap.Error(err))
-		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorDatabase, nil)
+		switch {
+		case errors.Is(err, user.ErrInvalidEmailFormat):
+			log.Warn("Invalid email format", zap.String("email", req.Email))
+			response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
+
+		default:
+			log.Error("Email check failed", zap.String("email", req.Email), zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorDatabase, nil)
+		}
 		return
 	}
 
@@ -312,19 +368,24 @@ func (h *Handler) CheckPassword(c *gin.Context) {
 	log.Debug("CheckPassword called [Start]", zap.String("user_id", userID))
 	defer log.Debug("CheckPassword [End]", zap.String("user_id", userID))
 
-	user, err := h.UserService.FindByID(ctx, userID)
+	err := h.UserService.CheckPassword(ctx, userID, req.Password)
 	if err != nil {
-		log.Warn("CheckPassword - user not found", zap.String("user_id", userID), zap.Error(err))
-		response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
+		switch {
+		case errors.Is(err, user.ErrUserNotFound):
+			log.Warn("User not found", zap.String("user_id", userID))
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
+
+		case errors.Is(err, user.ErrPasswordMismatch):
+			log.Warn("Password mismatch", zap.String("user_id", userID))
+			response.HandleResponse(c, http.StatusUnauthorized, response.ErrorPasswordMismatch, nil)
+
+		default:
+			log.Error("CheckPassword failed", zap.String("user_id", userID), zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorDatabase, nil)
+		}
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		log.Warn("CheckPassword - password mismatch", zap.String("user_id", userID))
-		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorPasswordMismatch, nil)
-		return
-	}
-
-	log.Info("Password verification success", zap.String("user_id", userID))
+	log.Info("Password verified", zap.String("user_id", userID))
 	response.HandleResponse(c, http.StatusOK, response.SuccessPasswordVerified, nil)
 }
