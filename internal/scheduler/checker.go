@@ -6,7 +6,7 @@ import (
 )
 
 type Executor interface {
-	Execute(ctx context.Context) error
+	Execute(ctx context.Context, playload any) error
 }
 
 type Task struct {
@@ -15,6 +15,7 @@ type Task struct {
 	NextCheckAt time.Time
 	Interval    time.Duration
 	Index       int
+	Payload     any
 }
 
 type TaskQueue interface {

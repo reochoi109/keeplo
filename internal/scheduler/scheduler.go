@@ -2,74 +2,122 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"keeplo/pkg/logger"
+	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
+var ErrQueueNotFound = errors.New("not found queue")
+
 type scheduler struct {
-	queue TaskQueue
+	queues map[string]TaskQueue
+	lock   sync.RWMutex
 }
 
 var Scheduler *scheduler
 
-func NewScheduler(queue TaskQueue) {
+func NewScheduler() {
 	Scheduler = &scheduler{
-		queue: queue,
+		queues: make(map[string]TaskQueue),
 	}
 }
 
-func RegisterTask(ctx context.Context, id string, interval time.Duration) error {
-	task := &Task{
-		ID:          id,
-		NextCheckAt: time.Now().Add(interval),
-		Interval:    interval,
+func AddQueue(name string, queue TaskQueue) {
+	Scheduler.lock.Lock()
+	defer Scheduler.lock.Unlock()
+
+	log := logger.Log
+	if _, exists := Scheduler.queues[name]; exists {
+		log.Warn("Queue already exists", zap.String("queue", name))
+		return
+	}
+	Scheduler.queues[name] = queue
+	log.Info("Queue added to scheduler", zap.String("queue", name))
+	go startQueueWorker(name, queue)
+}
+
+// 큐에 Task 등록
+func RegisterTask(ctx context.Context, queueName string, task *Task) error {
+	Scheduler.lock.RLock()
+	queue, ok := Scheduler.queues[queueName]
+	Scheduler.lock.RUnlock()
+	log := logger.Log
+	if !ok {
+		log.Error("Queue not found", zap.String("queue", queueName))
+		return ErrQueueNotFound
 	}
 
-	if err := Scheduler.queue.Push(task); err != nil {
-		return Scheduler.queue.UpdateTask(id, task.NextCheckAt)
+	if err := queue.Push(task); err != nil {
+		log.Warn("Task push failed, trying update", zap.String("task_id", task.ID), zap.Error(err))
+		return queue.UpdateTask(task.ID, task.NextCheckAt)
 	}
+
+	log.Debug("Task registered successfully", zap.String("task_id", task.ID), zap.String("queue", queueName))
 	return nil
 }
 
-func Start(ctx context.Context) {
+// Task 제거
+func RemoveTask(queueName, taskID string) {
+	Scheduler.lock.RLock()
+	queue, ok := Scheduler.queues[queueName]
+	Scheduler.lock.RUnlock()
+	log := logger.Log
+	if !ok {
+		log.Warn("Queue not found when removing task", zap.String("queue", queueName))
+		return
+	}
+
+	queue.RemoveTask(taskID)
+	log.Info("Task removed from queue", zap.String("task_id", taskID), zap.String("queue", queueName))
+}
+
+// 각 큐별 고루틴 루프
+func startQueueWorker(queueName string, queue TaskQueue) {
+	ctx := context.Background()
+	log := logger.Log
 	for {
-		task, err := Scheduler.queue.Pop(ctx)
+		task, err := queue.Pop(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				fmt.Println("service closing...")
+				log.Info("Queue shutting down", zap.String("queue", queueName))
 				return
 			}
-			fmt.Println("queue pop error:", err)
+			log.Error("Queue pop error", zap.String("queue", queueName), zap.Error(err))
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		go handleTask(ctx, task)
+		go handleTask(queueName, task)
 	}
 }
 
-func handleTask(ctx context.Context, task *Task) {
+func handleTask(queueName string, task *Task) {
+	log := logger.Log
+
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Recovered from panic in task:", r)
+			log.Error("Recovered from panic in task", zap.Any("recover", r), zap.String("task_id", task.ID))
 		}
 	}()
 
-	// 실제 헬스체크 로직은 이곳에서 처리
-	fmt.Printf("[CHECK] ID: %s | Time: %s\n", task.ID, time.Now().Format("15:04:05"))
+	if task.Executor != nil {
+		if err := task.Executor.Execute(context.Background(), task.Payload); err != nil {
+			log.Error("Task execution failed", zap.String("task_id", task.ID), zap.Error(err))
+		}
+	}
 
-	// 다음 체크 시간 계산
 	next := time.Now().Add(task.Interval)
-	// ing....
-
-	// 재등록 (Push → 중복 시 Update)
-	err := Scheduler.queue.Push(&Task{
+	err := RegisterTask(context.Background(), queueName, &Task{
 		ID:          task.ID,
-		NextCheckAt: next,
+		Executor:    task.Executor,
+		Payload:     task.Payload,
 		Interval:    task.Interval,
+		NextCheckAt: next,
 	})
 	if err != nil {
-		if updateErr := Scheduler.queue.UpdateTask(task.ID, next); updateErr != nil {
-			fmt.Printf("[ERROR] Failed to update task %s: %v\n", task.ID, updateErr)
-		}
+		log.Error("Failed to reschedule task", zap.String("task_id", task.ID), zap.Error(err))
+		return
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"keeplo/config"
 	"keeplo/internal/adapter/rest/router"
+	"keeplo/internal/scheduler"
 	"keeplo/pkg/auth"
 	"keeplo/pkg/db/postgresql"
 	"keeplo/pkg/logger"
@@ -31,6 +32,9 @@ func Run() {
 	defer cancel()
 
 	// go listenForShutdown(cancel)
+
+	scheduler.NewScheduler()
+	scheduler.AddQueue("health", scheduler.NewInMemoryQueue())
 	start(ctx)
 }
 

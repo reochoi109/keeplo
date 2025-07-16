@@ -68,13 +68,20 @@ func (m *monitorService) RegisterMonitor(ctx context.Context, userID string, req
 		UpdatedAt:       time.Now(),
 	}
 
+	// 1. DB 저장
 	if err := m.monitorRepo.Create(ctx, newMonitor); err != nil {
 		log.Error("RegisterMonitor - failed to create", zap.Error(err))
 		return err
 	}
 
-	interval := time.Duration(req.IntervalSeconds) * time.Second
-	if err := scheduler.RegisterTask(ctx, newMonitor.ID.String(), interval); err != nil {
+	// 2. 스케줄러 등록
+	task := &scheduler.Task{
+		ID:          newMonitor.ID.String(),
+		Executor:    &MonitorExecutor{},
+		Interval:    time.Duration(newMonitor.IntervalSeconds) * time.Second,
+		NextCheckAt: time.Now().Add(time.Duration(newMonitor.IntervalSeconds) * time.Second),
+	}
+	if err := scheduler.RegisterTask(ctx, "health", task); err != nil {
 		log.Error("RegisterMonitor - failed to register scheduler", zap.Error(err))
 		return err
 	}
