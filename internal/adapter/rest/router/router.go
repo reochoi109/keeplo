@@ -22,10 +22,10 @@ import (
 func Run(ctx context.Context) {
 	r := gin.Default()
 	api := r.Group("/api/v1")
+	// cors
 
 	// middleware
-
-	// cors
+	r.Use(middleware.UseTraceID())
 
 	// https
 

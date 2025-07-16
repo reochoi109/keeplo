@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/auth/duplicate": {
             "get": {
-                "description": "이메일 중복 체크 요청",
+                "description": "입력한 이메일이 이미 사용 중인지 확인합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -27,10 +27,10 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "이메일 중복 체크",
+                "summary": "이메일 중복 확인",
                 "parameters": [
                     {
-                        "description": "이메일",
+                        "description": "중복 확인할 이메일",
                         "name": "email",
                         "in": "body",
                         "required": true,
@@ -43,11 +43,32 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.ResponseFormat"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.ResponseFormat"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "boolean"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
@@ -57,7 +78,7 @@ const docTemplate = `{
         },
         "/auth/login": {
             "post": {
-                "description": "로그인 요청",
+                "description": "이메일과 비밀번호로 로그인을 수행합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -70,7 +91,7 @@ const docTemplate = `{
                 "summary": "로그인",
                 "parameters": [
                     {
-                        "description": "로그인 사용자 정보",
+                        "description": "로그인 요청 정보",
                         "name": "user",
                         "in": "body",
                         "required": true,
@@ -103,13 +124,19 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             }
         },
         "/auth/me": {
             "get": {
-                "description": "사용자 정보 조회",
+                "description": "현재 로그인한 사용자의 정보를 반환합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -119,25 +146,34 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "사용자 정보",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "사용자 고유 번호",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
+                "summary": "내 정보 조회",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.ResponseFormat"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
@@ -147,7 +183,7 @@ const docTemplate = `{
         },
         "/auth/me/logout": {
             "delete": {
-                "description": "로그아웃 요청",
+                "description": "JWT 기반 로그아웃. 클라이언트 토큰 삭제 필요.",
                 "consumes": [
                     "application/json"
                 ],
@@ -158,24 +194,9 @@ const docTemplate = `{
                     "auth"
                 ],
                 "summary": "로그아웃",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "사용자 고유번호",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ResponseFormat"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
@@ -185,7 +206,7 @@ const docTemplate = `{
         },
         "/auth/me/nickname": {
             "put": {
-                "description": "사용자의 닉네임을 변경합니다.",
+                "description": "사용자의 닉네임을 수정합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -198,7 +219,7 @@ const docTemplate = `{
                 "summary": "닉네임 변경",
                 "parameters": [
                     {
-                        "description": "닉네임 변경 요청",
+                        "description": "변경할 닉네임",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -219,13 +240,19 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             }
         },
         "/auth/me/password": {
             "put": {
-                "description": "사용자의 비밀번호를 변경합니다.",
+                "description": "기존 비밀번호를 새로운 비밀번호로 변경합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -238,7 +265,7 @@ const docTemplate = `{
                 "summary": "비밀번호 변경",
                 "parameters": [
                     {
-                        "description": "비밀번호 변경 요청",
+                        "description": "비밀번호 변경 정보",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -259,13 +286,19 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             }
         },
         "/auth/me/resign": {
             "delete": {
-                "description": "회원탈퇴 요청",
+                "description": "현재 로그인한 사용자를 탈퇴 처리합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -275,16 +308,7 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "회원탈퇴",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "사용자 고유번호",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
+                "summary": "회원 탈퇴",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -297,13 +321,19 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             }
         },
         "/auth/password": {
             "post": {
-                "description": "비밀번호 확인 요청",
+                "description": "입력한 비밀번호가 현재 비밀번호와 일치하는지 확인합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -313,10 +343,10 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "비밀번호 확인 요청",
+                "summary": "비밀번호 확인",
                 "parameters": [
                     {
-                        "description": "비밀번호",
+                        "description": "확인할 비밀번호",
                         "name": "password",
                         "in": "body",
                         "required": true,
@@ -337,13 +367,25 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             }
         },
         "/auth/signup": {
             "post": {
-                "description": "회원 가입 요청",
+                "description": "신규 사용자를 등록합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -356,7 +398,7 @@ const docTemplate = `{
                 "summary": "회원 가입",
                 "parameters": [
                     {
-                        "description": "가입 사용자 정보",
+                        "description": "회원가입 요청 정보",
                         "name": "user",
                         "in": "body",
                         "required": true,
@@ -383,7 +425,7 @@ const docTemplate = `{
         },
         "/monitor": {
             "get": {
-                "description": "사용자가 등록한 모니터링 목록 조회",
+                "description": "사용자가 등록한 모든 모니터링 항목을 조회합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -393,16 +435,37 @@ const docTemplate = `{
                 "tags": [
                     "monitor"
                 ],
-                "summary": "모니터링 목록",
+                "summary": "모니터링 목록 조회",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.ResponseFormat"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/dto.MonitorResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
@@ -410,7 +473,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "모니터링 추가 요청",
+                "description": "모니터링 항목을 신규 등록합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -423,7 +486,7 @@ const docTemplate = `{
                 "summary": "모니터링 추가",
                 "parameters": [
                     {
-                        "description": "신규 모니터링",
+                        "description": "신규 모니터링 등록 요청",
                         "name": "monitor",
                         "in": "body",
                         "required": true,
@@ -444,13 +507,25 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             }
         },
         "/monitor/{id}": {
             "get": {
-                "description": "사용자가 등록한 모니터링 상세 정보 조회",
+                "description": "특정 모니터링 항목의 상세 정보를 조회합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -460,11 +535,11 @@ const docTemplate = `{
                 "tags": [
                     "monitor"
                 ],
-                "summary": "상세 모니터링 정보",
+                "summary": "모니터링 상세 조회",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "모니터링 고유 번호",
+                        "description": "모니터링 고유 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -474,7 +549,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.ResponseFormat"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.ResponseFormat"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.MonitorResponse"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
@@ -482,11 +569,23 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             },
             "put": {
-                "description": "모니터링 상세 정보 업데이트 요청",
+                "description": "기존 모니터링 항목의 정보를 수정합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -496,17 +595,17 @@ const docTemplate = `{
                 "tags": [
                     "monitor"
                 ],
-                "summary": "모니터링 상세 정보 업데이트",
+                "summary": "모니터링 수정",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "모니터링 고유 번호",
+                        "description": "모니터링 고유 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "모니터링 업데이트 정보",
+                        "description": "수정할 정보",
                         "name": "monitor",
                         "in": "body",
                         "required": true,
@@ -527,11 +626,23 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
                     }
                 }
             },
             "delete": {
-                "description": "모니터링 삭제 요청",
+                "description": "특정 모니터링 항목을 삭제합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -545,7 +656,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "모니터링 고유 번호",
+                        "description": "모니터링 고유 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -558,8 +669,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
@@ -610,27 +727,84 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "email": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "user@example.com"
                 },
                 "token": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsIn..."
                 },
                 "user_id": {
+                    "type": "string",
+                    "example": "user-uuid-string"
+                }
+            }
+        },
+        "dto.MonitorResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "interval_seconds": {
+                    "type": "integer"
+                },
+                "last_checked_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
                     "type": "string"
                 }
             }
         },
         "dto.RegisterMonitorRequest": {
             "type": "object",
+            "required": [
+                "address",
+                "interval_seconds",
+                "name",
+                "port",
+                "type"
+            ],
             "properties": {
                 "address": {
+                    "description": "도메인 or IP",
                     "type": "string"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 10
                 },
                 "name": {
                     "type": "string"
                 },
                 "port": {
+                    "description": "포트 번호",
                     "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "http",
+                        "https",
+                        "websocket",
+                        "tcp"
+                    ]
                 }
             }
         },
@@ -681,10 +855,16 @@ const docTemplate = `{
                 "address": {
                     "type": "string"
                 },
+                "interval_seconds": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
                 "port": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -715,6 +895,19 @@ const docTemplate = `{
                 "new_password": {
                     "type": "string",
                     "minLength": 8
+                }
+            }
+        },
+        "dto.UserResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "user-uuid-string"
                 }
             }
         }

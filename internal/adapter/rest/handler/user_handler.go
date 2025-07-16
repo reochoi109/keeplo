@@ -5,267 +5,326 @@ import (
 	"keeplo/internal/adapter/rest/middleware"
 	"keeplo/internal/adapter/rest/response"
 	"keeplo/pkg/auth"
+	"keeplo/pkg/logger"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // SignupHandler godoc
 //
 //	@Summary		회원 가입
-//	@Description	회원 가입 요청
+//	@Description	신규 사용자를 등록합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			user	body		dto.SignupRequest	true	"가입 사용자 정보"
+//	@Param			user	body		dto.SignupRequest	true	"회원가입 요청 정보"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
 //	@Router			/auth/signup [post]
 func (h *Handler) SignupHandler(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
 	var req dto.SignupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.HandleResponse(c, http.StatusBadRequest, 40001, gin.H{
-			"error": "입력값이 유효하지 않습니다.",
-		})
+		log.Warn("SignupHandler - invalid request body", zap.Error(err))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	user, err := h.UserService.RegisterUser(c.Request.Context(), req.Email, req.Password)
+	log.Debug("SignupHandler called [Start]", zap.String("email", req.Email))
+	defer log.Debug("SignupHandler [End]", zap.String("email", req.Email))
+
+	user, err := h.UserService.RegisterUser(ctx, req.Email, req.Password)
 	if err != nil {
-		response.HandleResponse(c, http.StatusBadRequest, 40002, gin.H{
-			"error": err.Error(),
-		})
+		log.Warn("Signup failed", zap.String("email", req.Email), zap.Error(err))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorEmailAlreadyExists, nil)
 		return
 	}
 
-	response.HandleResponse(c, http.StatusOK, 20000, gin.H{
-		"id":    user.ID,
-		"email": user.Email,
-	})
+	log.Info("Signup success", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserRegistered, dto.NewUserResponse(user.ID.String(), user.Email))
 }
 
 // LoginHandler godoc
 //
 //	@Summary		로그인
-//	@Description	로그인 요청
+//	@Description	이메일과 비밀번호로 로그인을 수행합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			user	body		dto.LoginRequest	true	"로그인 사용자 정보"
+//	@Param			user	body		dto.LoginRequest	true	"로그인 요청 정보"
 //	@Success		200		{object}	dto.ResponseFormat{data=dto.LoginResponse}
 //	@Failure		400		{object}	dto.ResponseFormat
+//	@Failure		500		{object}	dto.ResponseFormat
 //	@Router			/auth/login [post]
 func (h *Handler) LoginHandler(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.HandleResponse(c, 400, 400, nil)
+		log.Warn("LoginHandler - invalid request body", zap.Error(err))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	user, err := h.UserService.LoginUser(c.Request.Context(), req.Email, req.Password)
+	log.Debug("LoginHandler called [Start]", zap.String("email", req.Email))
+	defer log.Debug("LoginHandler [End]", zap.String("email", req.Email))
+
+	user, err := h.UserService.LoginUser(ctx, req.Email, req.Password)
 	if err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": err.Error()})
+		log.Warn("Login failed - user not found", zap.String("email", req.Email), zap.Error(err))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorUserNotFound, nil)
 		return
 	}
 
 	token, err := auth.GenerateToken(user.ID.String())
 	if err != nil {
-		response.HandleResponse(c, 500, 500, nil)
+		log.Error("Token generation failed", zap.String("user_id", user.ID.String()), zap.Error(err))
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
 		return
 	}
 
-	response.HandleResponse(c, 200, 200, gin.H{
-		"token": token,
-		"user": gin.H{
-			"id":    user.ID,
-			"email": user.Email,
-		},
-	})
+	log.Info("Login success", zap.String("user_id", user.ID.String()), zap.String("email", req.Email))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserLoggedIn, dto.NewLoginResponse(token, user.ID.String(), req.Email))
 }
 
 // GetUserInfoHandler godoc
 //
-//	@Summary		사용자 정보
-//	@Description	사용자 정보 조회
+//	@Summary		내 정보 조회
+//	@Description	현재 로그인한 사용자의 정보를 반환합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			id	path		string	true	"사용자 고유 번호"
-//	@Success		200		{object}	dto.ResponseFormat
-//	@Failure		400		{object}	dto.ResponseFormat
+//	@Success		200		{object}	dto.ResponseFormat{data=dto.UserResponse}
+//	@Failure		401		{object}	dto.ResponseFormat
+//	@Failure		404		{object}	dto.ResponseFormat
 //	@Router			/auth/me [get]
 func (h *Handler) GetUserInfoHandler(c *gin.Context) {
-	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
 
-	user, err := h.UserService.FindByID(c.Request.Context(), userID)
+	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	log.Debug("GetUserInfoHandler called [Start]", zap.String("user_id", userID))
+	defer log.Debug("GetUserInfoHandler [End]", zap.String("user_id", userID))
+
+	user, err := h.UserService.FindByID(ctx, userID)
 	if err != nil {
-		response.HandleResponse(c, 404, 404, gin.H{"error": "user not found"})
+		log.Warn("User not found", zap.String("user_id", userID), zap.Error(err))
+		response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
 		return
 	}
-	response.HandleResponse(c, 200, 200, gin.H{
-		"id":    user.ID,
-		"email": user.Email,
-	})
+
+	log.Info("User info fetched", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserFetched, dto.NewUserResponse(user.ID.String(), user.Email))
 }
 
 // UpdateNicknameHandler godoc
 //
 //	@Summary		닉네임 변경
-//	@Description	사용자의 닉네임을 변경합니다.
+//	@Description	사용자의 닉네임을 수정합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body	dto.UpdateNicknameRequest	true	"닉네임 변경 요청"
+//	@Param			body	body	dto.UpdateNicknameRequest	true	"변경할 닉네임"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
+//	@Failure		401		{object}	dto.ResponseFormat
 //	@Router			/auth/me/nickname [put]
 func (h *Handler) UpdateNicknameHandler(c *gin.Context) {
-	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
 
+	userID := c.MustGet(middleware.ContextUserIDKey).(string)
 	var req dto.UpdateNicknameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": "잘못된 요청 형식입니다."})
+		log.Warn("UpdateNicknameHandler - invalid request body", zap.Error(err), zap.String("user_id", userID))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	err := h.UserService.UpdateNickname(c.Request.Context(), userID, req.NickName)
-	if err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": err.Error()})
+	log.Debug("UpdateNicknameHandler called [Start]", zap.String("user_id", userID), zap.String("nickname", req.NickName))
+	defer log.Debug("UpdateNicknameHandler [End]", zap.String("user_id", userID))
+
+	if err := h.UserService.UpdateNickname(ctx, userID, req.NickName); err != nil {
+		log.Error("Nickname update failed", zap.String("user_id", userID), zap.Error(err))
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
 		return
 	}
 
-	response.HandleResponse(c, 200, 200, gin.H{"message": "닉네임이 변경되었습니다."})
+	log.Info("Nickname updated", zap.String("user_id", userID), zap.String("new_nickname", req.NickName))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserUpdated, nil)
 }
 
 // UpdatePasswordHandler godoc
 //
 //	@Summary		비밀번호 변경
-//	@Description	사용자의 비밀번호를 변경합니다.
+//	@Description	기존 비밀번호를 새로운 비밀번호로 변경합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			body	body	dto.UpdatePasswordRequest	true	"비밀번호 변경 요청"
+//	@Param			body	body	dto.UpdatePasswordRequest	true	"비밀번호 변경 정보"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
+//	@Failure		401		{object}	dto.ResponseFormat
 //	@Router			/auth/me/password [put]
 func (h *Handler) UpdatePasswordHandler(c *gin.Context) {
-	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
 
+	userID := c.MustGet(middleware.ContextUserIDKey).(string)
 	var req dto.UpdatePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": "잘못된 요청 형식입니다."})
+		log.Warn("UpdatePasswordHandler - invalid request body", zap.Error(err), zap.String("user_id", userID))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	err := h.UserService.UpdatePassword(c.Request.Context(), userID, req.CurrentPassword, req.NewPassword)
+	log.Debug("UpdatePasswordHandler called [Start]", zap.String("user_id", userID))
+	defer log.Debug("UpdatePasswordHandler [End]", zap.String("user_id", userID))
+
+	err := h.UserService.UpdatePassword(ctx, userID, req.CurrentPassword, req.NewPassword)
 	if err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": err.Error()})
+		log.Warn("Password update failed - current password mismatch", zap.String("user_id", userID), zap.Error(err))
+		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorPasswordMismatch, nil)
 		return
 	}
 
-	response.HandleResponse(c, 200, 200, gin.H{"message": "비밀번호가 변경되었습니다."})
+	log.Info("Password updated successfully", zap.String("user_id", userID))
+	response.HandleResponse(c, http.StatusOK, response.SuccessPasswordChanged, nil)
 }
 
 // LogoutHandler godoc
 //
 //	@Summary		로그아웃
-//	@Description	로그아웃 요청
+//	@Description	JWT 기반 로그아웃. 클라이언트 토큰 삭제 필요.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			id	path		string	true	"사용자 고유번호"
 //	@Success		200		{object}	dto.ResponseFormat
-//	@Failure		400		{object}	dto.ResponseFormat
 //	@Router			/auth/me/logout [delete]
 func (h *Handler) LogoutHandler(c *gin.Context) {
-	// JWT 기반에서는 클라이언트에서 토큰 삭제 또는 무효화
-	response.HandleResponse(c, 200, 200, gin.H{
-		"message": "로그아웃 되었습니다. 클라이언트에서 토큰을 삭제해주세요.",
-	})
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
+	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	log.Debug("LogoutHandler - user logged out", zap.String("user_id", userID))
+
+	response.HandleResponse(c, http.StatusOK, response.SuccessLoggedOut, nil)
 }
 
 // ReSignHandler godoc
 //
-//	@Summary		회원탈퇴
-//	@Description	회원탈퇴 요청
+//	@Summary		회원 탈퇴
+//	@Description	현재 로그인한 사용자를 탈퇴 처리합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			id	path		string	true	"사용자 고유번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
+//	@Failure		401		{object}	dto.ResponseFormat
 //	@Router			/auth/me/resign [delete]
 func (h *Handler) ReSignHandler(c *gin.Context) {
-	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
 
-	err := h.UserService.DeleteUser(c.Request.Context(), userID)
+	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	log.Debug("ReSignHandler called [Start]", zap.String("user_id", userID))
+	defer log.Debug("ReSignHandler [End]", zap.String("user_id", userID))
+
+	err := h.UserService.DeleteUser(ctx, userID)
 	if err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": err.Error()})
+		log.Error("User deletion failed", zap.String("user_id", userID), zap.Error(err))
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
 		return
 	}
 
-	response.HandleResponse(c, 200, 200, gin.H{
-		"message": "회원 탈퇴가 완료되었습니다.",
-	})
+	log.Info("User resigned successfully", zap.String("user_id", userID))
+	response.HandleResponse(c, http.StatusOK, response.SuccessUserResigned, nil)
 }
 
 // DuplicateEmail godoc
 //
-//	@Summary		이메일 중복 체크
-//	@Description	이메일 중복 체크 요청
+//	@Summary		이메일 중복 확인
+//	@Description	입력한 이메일이 이미 사용 중인지 확인합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			email	body		dto.DuplicateEmailRequest	true	"이메일"
-//	@Success		200		{object}	dto.ResponseFormat
+//	@Param			email	body	dto.DuplicateEmailRequest	true	"중복 확인할 이메일"
+//	@Success		200		{object}	dto.ResponseFormat{data=map[string]bool}
 //	@Failure		400		{object}	dto.ResponseFormat
+//	@Failure		500		{object}	dto.ResponseFormat
 //	@Router			/auth/duplicate [get]
 func (h *Handler) DuplicateEmail(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
 	var req dto.DuplicateEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": "잘못된 요청입니다."})
+		log.Warn("DuplicateEmail - invalid request body", zap.Error(err))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	exists, err := h.UserService.CheckDuplicateEmail(c.Request.Context(), req.Email)
+	log.Debug("DuplicateEmail called [Start]", zap.String("email", req.Email))
+	defer log.Debug("DuplicateEmail [End]", zap.String("email", req.Email))
+
+	exists, err := h.UserService.CheckDuplicateEmail(ctx, req.Email)
 	if err != nil {
-		response.HandleResponse(c, 500, 500, gin.H{"error": err.Error()})
+		log.Error("Email check failed", zap.String("email", req.Email), zap.Error(err))
+		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorDatabase, nil)
 		return
 	}
 
-	response.HandleResponse(c, 200, 200, gin.H{"is_duplicate": exists})
+	log.Info("Duplicate email check success", zap.String("email", req.Email), zap.Bool("exists", exists))
+	response.HandleResponse(c, http.StatusOK, response.SuccessDuplicateChecked, dto.NewDuplicateEmailResponse(exists))
 }
 
 // CheckPassword godoc
 //
-//	@Summary		비밀번호 확인 요청
-//	@Description	비밀번호 확인 요청
+//	@Summary		비밀번호 확인
+//	@Description	입력한 비밀번호가 현재 비밀번호와 일치하는지 확인합니다.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			password	body	dto.CheckPasswordRequest	true	"비밀번호"
+//	@Param			password	body	dto.CheckPasswordRequest	true	"확인할 비밀번호"
 //	@Success		200		{object}	dto.ResponseFormat
 //	@Failure		400		{object}	dto.ResponseFormat
+//	@Failure		401		{object}	dto.ResponseFormat
+//	@Failure		404		{object}	dto.ResponseFormat
 //	@Router			/auth/password [post]
 func (h *Handler) CheckPassword(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
 	userID := c.MustGet(middleware.ContextUserIDKey).(string)
 	var req dto.CheckPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.HandleResponse(c, 400, 400, gin.H{"error": "잘못된 요청입니다."})
+		log.Warn("CheckPassword - invalid request body", zap.Error(err))
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	user, err := h.UserService.FindByID(c.Request.Context(), userID)
+	log.Debug("CheckPassword called [Start]", zap.String("user_id", userID))
+	defer log.Debug("CheckPassword [End]", zap.String("user_id", userID))
+
+	user, err := h.UserService.FindByID(ctx, userID)
 	if err != nil {
-		response.HandleResponse(c, 404, 404, gin.H{"error": "사용자 정보가 없습니다."})
+		log.Warn("CheckPassword - user not found", zap.String("user_id", userID), zap.Error(err))
+		response.HandleResponse(c, http.StatusNotFound, response.ErrorUserNotFound, nil)
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		response.HandleResponse(c, 401, 401, gin.H{"error": "비밀번호가 일치하지 않습니다."})
+		log.Warn("CheckPassword - password mismatch", zap.String("user_id", userID))
+		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorPasswordMismatch, nil)
 		return
 	}
 
-	response.HandleResponse(c, 200, 200, gin.H{"message": "비밀번호가 확인되었습니다."})
+	log.Info("Password verification success", zap.String("user_id", userID))
+	response.HandleResponse(c, http.StatusOK, response.SuccessPasswordVerified, nil)
 }

@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 	"keeplo/internal/domain/user"
+	"keeplo/pkg/logger"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const passwordCost = 12
+const userTimeout = time.Second * 5
 
 type Service interface {
 	RegisterUser(ctx context.Context, email, password string) (*user.User, error)
@@ -34,22 +37,29 @@ func NewUserService(repo user.Repository) Service {
 }
 
 func (s *service) RegisterUser(ctx context.Context, email, password string) (*user.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
 	if len(email) == 0 || len(password) == 0 {
-		return nil, fmt.Errorf("input error, email or password is empty")
+		log.Warn("RegisterUser - email or password is empty")
+		return nil, fmt.Errorf("email or password is required")
 	}
 
 	exist, err := s.repo.IsEmailExists(ctx, email)
 	if err != nil {
+		log.Error("RegisterUser - failed to check email existence", zap.Error(err))
 		return nil, err
 	}
-
 	if exist {
-		return nil, fmt.Errorf("already exists email address")
+		log.Warn("RegisterUser - email already exists", zap.String("email", email))
+		return nil, fmt.Errorf("email already exists")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), passwordCost)
 	if err != nil {
+		log.Error("RegisterUser - failed to hash password", zap.Error(err))
 		return nil, err
 	}
 
@@ -65,96 +75,195 @@ func (s *service) RegisterUser(ctx context.Context, email, password string) (*us
 	}
 
 	if err := s.repo.Create(ctx, newUser); err != nil {
+		log.Error("RegisterUser - failed to create user", zap.Error(err))
 		return nil, err
 	}
+
+	log.Info("RegisterUser - user created", zap.String("user_id", newUser.ID.String()), zap.String("email", email))
 	return newUser, nil
 }
 
 func (s *service) LoginUser(ctx context.Context, email, password string) (*user.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
+
 	u, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
+		log.Error("LoginUser - user not found", zap.Error(err))
 		return nil, err
 	}
 
 	if u.IsDeleted || !u.IsActive {
-		return nil, fmt.Errorf("account is inactive")
+		log.Warn("LoginUser - user inactive or deleted", zap.String("email", email))
+		return nil, fmt.Errorf("account is inactive or deleted")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return nil, fmt.Errorf("password or email is wrong")
+		log.Warn("LoginUser - invalid password", zap.String("email", email))
+		return nil, fmt.Errorf("invalid email or password")
 	}
+
+	log.Info("LoginUser - success", zap.String("user_id", u.ID.String()), zap.String("email", email))
 	return u, nil
 }
 
 func (s *service) FindByID(ctx context.Context, id string) (*user.User, error) {
-	return s.repo.FindByID(ctx, id)
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
+	u, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		log.Error("FindByID - failed", zap.String("user_id", id), zap.Error(err))
+		return nil, err
+	}
+	return u, nil
 }
 
 func (s *service) ResignUser(ctx context.Context, id string) error {
-	return s.repo.SoftDelete(ctx, id)
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
+	if err := s.repo.SoftDelete(ctx, id); err != nil {
+		log.Error("ResignUser - failed", zap.String("user_id", id), zap.Error(err))
+		return err
+	}
+	log.Info("ResignUser - success", zap.String("user_id", id))
+	return nil
 }
 
 func (s *service) CheckPassword(ctx context.Context, id, password string) error {
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		log.Error("CheckPassword - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
-	return bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+		log.Warn("CheckPassword - mismatch", zap.String("user_id", id))
+		return err
+	}
+
+	return nil
 }
 
 func (s *service) UpdateNickname(ctx context.Context, id, nickname string) error {
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
 	if len(strings.TrimSpace(nickname)) == 0 {
-		return fmt.Errorf("닉네임을 입력하세요")
+		log.Warn("UpdateNickname - nickname is empty", zap.String("user_id", id))
+		return fmt.Errorf("nickname is required")
 	}
+
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		log.Error("UpdateNickname - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
+
 	if u.IsDeleted || !u.IsActive {
-		return fmt.Errorf("계정을 사용할 수 없습니다")
+		log.Warn("UpdateNickname - user inactive", zap.String("user_id", id))
+		return fmt.Errorf("cannot update inactive account")
 	}
+
 	u.NickName = strings.TrimSpace(nickname)
 	u.UpdatedAt = time.Now()
-	return s.repo.Update(ctx, u)
+	if err := s.repo.Update(ctx, u); err != nil {
+		log.Error("UpdateNickname - update failed", zap.String("user_id", id), zap.Error(err))
+		return err
+	}
+
+	log.Info("UpdateNickname - success", zap.String("user_id", id))
+	return nil
 }
 
 func (s *service) UpdatePassword(ctx context.Context, id, currentPassword, newPassword string) error {
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		log.Error("UpdatePassword - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
+
 	if u.IsDeleted || !u.IsActive {
-		return fmt.Errorf("계정을 사용할 수 없습니다")
+		log.Warn("UpdatePassword - user inactive", zap.String("user_id", id))
+		return fmt.Errorf("cannot update inactive account")
 	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
-		return fmt.Errorf("현재 비밀번호가 일치하지 않습니다")
+		log.Warn("UpdatePassword - current password mismatch", zap.String("user_id", id))
+		return fmt.Errorf("current password does not match")
 	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), passwordCost)
 	if err != nil {
+		log.Error("UpdatePassword - hashing failed", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
+
 	u.PasswordHash = string(hash)
 	u.UpdatedAt = time.Now()
-	return s.repo.Update(ctx, u)
+	if err := s.repo.Update(ctx, u); err != nil {
+		log.Error("UpdatePassword - update failed", zap.String("user_id", id), zap.Error(err))
+		return err
+	}
+
+	log.Info("UpdatePassword - success", zap.String("user_id", id))
+	return nil
 }
 
 func (s *service) DeleteUser(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		log.Error("DeleteUser - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
 
 	if u.IsDeleted {
-		return fmt.Errorf("이미 탈퇴된 계정입니다")
+		log.Warn("DeleteUser - already deleted", zap.String("user_id", id))
+		return fmt.Errorf("account already deleted")
 	}
 
 	u.IsDeleted = true
 	u.UpdatedAt = time.Now()
-	return s.repo.Update(ctx, u)
+	if err := s.repo.Update(ctx, u); err != nil {
+		log.Error("DeleteUser - update failed", zap.String("user_id", id), zap.Error(err))
+		return err
+	}
+
+	log.Info("DeleteUser - success", zap.String("user_id", id))
+	return nil
 }
 
 func (s *service) CheckDuplicateEmail(ctx context.Context, email string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, userTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
-	return s.repo.IsEmailExists(ctx, email)
+	exists, err := s.repo.IsEmailExists(ctx, email)
+	if err != nil {
+		log.Error("CheckDuplicateEmail - failed", zap.String("email", email), zap.Error(err))
+		return false, err
+	}
+
+	log.Debug("CheckDuplicateEmail - completed", zap.String("email", email), zap.Bool("exists", exists))
+	return exists, nil
 }
