@@ -59,6 +59,29 @@ func RegisterTask(ctx context.Context, queueName string, task *Task) error {
 	return nil
 }
 
+// 업데이트
+func UpdateTask(ctx context.Context, queueName string, updated *Task) error {
+	log := logger.WithContext(ctx)
+	Scheduler.lock.Lock()
+	queue, ok := Scheduler.queues[queueName]
+	Scheduler.lock.Unlock()
+
+	if !ok {
+		log.Error("Queue not found", zap.String("queue", queueName))
+		return ErrQueueNotFound
+	}
+
+	// update task는 NextCheckAt만 갱신하므로 다른 필드는 remove -> Push 방식으로 처리
+	queue.RemoveTask(updated.ID)
+	if err := queue.Push(updated); err != nil {
+		log.Error("Failed to update task", zap.String("task_id", updated.ID), zap.Error(err))
+		return err
+	}
+
+	log.Info("Task updated", zap.String("task_id", updated.ID), zap.String("queue", queueName))
+	return nil
+}
+
 // Task 제거
 func RemoveTask(queueName, taskID string) {
 	Scheduler.lock.RLock()

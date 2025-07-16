@@ -104,4 +104,6 @@ $RECYCLE.BIN/
 .env
 .env.dev
 .env.prod
+.vscode
+html
 memo
