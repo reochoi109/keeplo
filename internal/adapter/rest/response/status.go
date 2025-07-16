@@ -35,6 +35,7 @@ const (
 	ErrorMonitorUpdateFailed  StatusCode = 4104
 	ErrorMonitorDeleteFailed  StatusCode = 4105
 	ErrorMonitorFetchFailed   StatusCode = 4106
+	ErrorPermissionDenied     StatusCode = 4107
 
 	// --- Auth Errors (4200~)
 	ErrorUserNotFound       StatusCode = 4201
@@ -82,6 +83,7 @@ var messageMap = map[StatusCode]string{
 	ErrorMonitorUpdateFailed:  "모니터링 수정에 실패했습니다.",
 	ErrorMonitorDeleteFailed:  "모니터링 삭제에 실패했습니다.",
 	ErrorMonitorFetchFailed:   "모니터링 상세 조회에 실패했습니다.",
+	ErrorPermissionDenied:     "요청에 대한 권한이 없습니다.",
 	ErrorUserNotFound:         "해당 사용자를 찾을 수 없습니다.",
 	ErrorEmailAlreadyExists:   "이미 사용 중인 이메일입니다.",
 	ErrorPasswordMismatch:     "비밀번호가 일치하지 않습니다.",

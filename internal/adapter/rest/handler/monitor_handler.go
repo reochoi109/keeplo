@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"keeplo/internal/adapter/rest/dto"
 	"keeplo/internal/adapter/rest/middleware"
 	"keeplo/internal/adapter/rest/response"
+	"keeplo/internal/domain/monitor"
 	"keeplo/pkg/logger"
 	"net/http"
 
@@ -32,25 +34,31 @@ func (h *Handler) RegisterMonitorHandler(c *gin.Context) {
 
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		log.Error("authorized : not found user info", zap.String("ip", c.Request.Host))
+		log.Warn("RegisterMonitorHandler - unauthorized", zap.String("ip", c.ClientIP()))
 		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized, nil)
 		return
 	}
-	log.Debug("RegisterMonitorHandler called [Start]", zap.String("id", userID.(string)))
-	defer log.Debug("RegisterMonitorHandler [End]", zap.String("id", userID.(string)))
 
 	var req dto.RegisterMonitorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error("input error : invalid data", zap.Error(err))
+		log.Warn("RegisterMonitorHandler - invalid request", zap.Error(err))
 		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
-	if err := h.MonitorService.RegisterMonitor(c.Request.Context(), userID.(string), req); err != nil {
-		log.Error("internal error", zap.Error(err))
-		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorRegisterFailed, nil)
+	err := h.MonitorService.RegisterMonitor(ctx, userID.(string), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, monitor.ErrInvalidMonitorData):
+			response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
+		default:
+			log.Error("RegisterMonitorHandler - internal error", zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorRegisterFailed, nil)
+		}
 		return
 	}
+
+	log.Info("RegisterMonitorHandler - success", zap.String("user_id", userID.(string)))
 	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorRegistered, nil)
 }
 
@@ -71,17 +79,14 @@ func (h *Handler) GetMonitorListHandler(c *gin.Context) {
 
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		log.Error("unauthorized access", zap.String("ip", c.Request.Host))
-		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
+		log.Warn("GetMonitorListHandler - unauthorized", zap.String("ip", c.ClientIP()))
+		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized, nil)
 		return
 	}
 
-	log.Debug("GetMonitorListHandler called [Start]", zap.String("user_id", userID.(string)))
-	defer log.Debug("GetMonitorListHandler [End]", zap.String("user_id", userID.(string)))
-
 	monitors, err := h.MonitorService.SearchMonitorList(ctx, userID.(string))
 	if err != nil {
-		log.Error("failed to fetch monitor list", zap.Error(err))
+		log.Error("GetMonitorListHandler - fetch failed", zap.Error(err))
 		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorInternalServer, nil)
 		return
 	}
@@ -90,6 +95,8 @@ func (h *Handler) GetMonitorListHandler(c *gin.Context) {
 	for _, m := range monitors {
 		list = append(list, dto.ToMonitorResponse(m))
 	}
+
+	log.Info("GetMonitorListHandler - success", zap.String("user_id", userID.(string)))
 	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorListed, list)
 }
 
@@ -112,23 +119,26 @@ func (h *Handler) GetMonitorHandler(c *gin.Context) {
 
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		log.Error("unauthorized access", zap.String("ip", c.Request.Host))
-		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
+		log.Warn("GetMonitorHandler - unauthorized", zap.String("ip", c.ClientIP()))
+		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized, nil)
 		return
 	}
 
 	id := c.Param("id")
-	log.Debug("GetMonitorHandler called [Start]", zap.String("id", id), zap.String("user_id", userID.(string)))
-	defer log.Debug("GetMonitorHandler [End]", zap.String("id", id))
-
-	m, err := h.MonitorService.SearchMonitor(ctx, id)
+	monitorObj, err := h.MonitorService.SearchMonitor(ctx, id)
 	if err != nil {
-		log.Error("failed to fetch monitor detail", zap.String("monitor_id", id), zap.Error(err))
-		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorFetchFailed, nil)
+		switch {
+		case errors.Is(err, monitor.ErrMonitorNotFound):
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorMonitorNotFound, nil)
+		default:
+			log.Error("GetMonitorHandler - fetch failed", zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorFetchFailed, nil)
+		}
 		return
 	}
 
-	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorFetched, dto.ToMonitorResponse(m))
+	log.Info("GetMonitorHandler - success", zap.String("monitor_id", id), zap.String("user_id", userID.(string)))
+	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorFetched, dto.ToMonitorResponse(monitorObj))
 }
 
 // UpdateMonitorHandler godoc
@@ -151,29 +161,34 @@ func (h *Handler) UpdateMonitorHandler(c *gin.Context) {
 
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		log.Error("unauthorized access", zap.String("ip", c.Request.Host))
-		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
+		log.Warn("UpdateMonitorHandler - unauthorized", zap.String("ip", c.ClientIP()))
+		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized, nil)
 		return
 	}
 
 	id := c.Param("id")
-	log.Debug("UpdateMonitorHandler called [Start]", zap.String("id", id), zap.String("user_id", userID.(string)))
-	defer log.Debug("UpdateMonitorHandler [End]", zap.String("id", id))
-
 	var req dto.UpdateMonitorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error("input error : invalid update data", zap.Error(err))
+		log.Warn("UpdateMonitorHandler - invalid request", zap.Error(err))
 		response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
 		return
 	}
 
 	err := h.MonitorService.ModifyMonitor(ctx, id, userID.(string), req)
 	if err != nil {
-		log.Error("update error", zap.Error(err))
-		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorUpdateFailed, nil)
+		switch {
+		case errors.Is(err, monitor.ErrMonitorNotFound):
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorMonitorNotFound, nil)
+		case errors.Is(err, monitor.ErrPermissionDenied):
+			response.HandleResponse(c, http.StatusForbidden, response.ErrorPermissionDenied, nil)
+		default:
+			log.Error("UpdateMonitorHandler - update failed", zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorUpdateFailed, nil)
+		}
 		return
 	}
 
+	log.Info("UpdateMonitorHandler - success", zap.String("monitor_id", id), zap.String("user_id", userID.(string)))
 	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorUpdated, nil)
 }
 
@@ -195,20 +210,26 @@ func (h *Handler) RemoveMonitorHandler(c *gin.Context) {
 
 	userID, ok := c.Get(middleware.ContextUserIDKey)
 	if !ok {
-		log.Error("unauthorized access", zap.String("ip", c.Request.Host))
-		response.AbortWithResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized)
+		log.Warn("RemoveMonitorHandler - unauthorized", zap.String("ip", c.ClientIP()))
+		response.HandleResponse(c, http.StatusUnauthorized, response.ErrorUnauthorized, nil)
 		return
 	}
 
 	id := c.Param("id")
-	log.Debug("RemoveMonitorHandler called [Start]", zap.String("id", id), zap.String("user_id", userID.(string)))
-	defer log.Debug("RemoveMonitorHandler [End]", zap.String("id", id))
-
-	if err := h.MonitorService.DeleteMonitor(ctx, id); err != nil {
-		log.Error("delete error", zap.Error(err))
-		response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorDeleteFailed, nil)
+	err := h.MonitorService.DeleteMonitor(ctx, id, userID.(string))
+	if err != nil {
+		switch {
+		case errors.Is(err, monitor.ErrMonitorNotFound):
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorMonitorNotFound, nil)
+		case errors.Is(err, monitor.ErrPermissionDenied):
+			response.HandleResponse(c, http.StatusForbidden, response.ErrorPermissionDenied, nil)
+		default:
+			log.Error("RemoveMonitorHandler - delete failed", zap.Error(err))
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorDeleteFailed, nil)
+		}
 		return
 	}
 
+	log.Info("RemoveMonitorHandler - success", zap.String("monitor_id", id), zap.String("user_id", userID.(string)))
 	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorDeleted, nil)
 }
