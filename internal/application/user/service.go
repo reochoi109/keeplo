@@ -214,6 +214,10 @@ func (s *service) UpdatePassword(ctx context.Context, id, currentPassword, newPa
 	log := logger.WithContext(ctx)
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("UpdatePassword - user not found", zap.String("user_id", id))
+			return user.ErrUserNotFound
+		}
 		log.Error("UpdatePassword - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
@@ -252,6 +256,10 @@ func (s *service) DeleteUser(ctx context.Context, id string) error {
 	log := logger.WithContext(ctx)
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("DeleteUser - user not found", zap.String("user_id", id))
+			return user.ErrUserNotFound
+		}
 		log.Error("DeleteUser - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
