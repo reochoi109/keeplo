@@ -3,7 +3,6 @@ package user
 import (
 	"context"
 	"errors"
-	"fmt"
 	"keeplo/internal/domain/user"
 	"keeplo/pkg/logger"
 	"strings"
@@ -154,6 +153,10 @@ func (s *service) CheckPassword(ctx context.Context, id, password string) error 
 	log := logger.WithContext(ctx)
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("CheckPassword - user not found", zap.String("user_id", id))
+			return user.ErrUserNotFound
+		}
 		log.Error("CheckPassword - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
@@ -171,23 +174,29 @@ func (s *service) UpdateNickname(ctx context.Context, id, nickname string) error
 	defer cancel()
 
 	log := logger.WithContext(ctx)
-	if len(strings.TrimSpace(nickname)) == 0 {
+
+	nickname = strings.TrimSpace(nickname)
+	if len(nickname) == 0 {
 		log.Warn("UpdateNickname - nickname is empty", zap.String("user_id", id))
-		return fmt.Errorf("nickname is required")
+		return user.ErrNicknameRequired
 	}
 
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("UpdateNickname - user not found", zap.String("user_id", id))
+			return user.ErrUserNotFound
+		}
 		log.Error("UpdateNickname - failed to get user", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
 
 	if u.IsDeleted || !u.IsActive {
 		log.Warn("UpdateNickname - user inactive", zap.String("user_id", id))
-		return fmt.Errorf("cannot update inactive account")
+		return user.ErrInactiveAccount
 	}
 
-	u.NickName = strings.TrimSpace(nickname)
+	u.NickName = nickname
 	u.UpdatedAt = time.Now()
 	if err := s.repo.Update(ctx, u); err != nil {
 		log.Error("UpdateNickname - update failed", zap.String("user_id", id), zap.Error(err))
