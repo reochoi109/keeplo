@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"keeplo/internal/domain/user"
 	"keeplo/pkg/logger"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 const passwordCost = 12
@@ -42,9 +44,10 @@ func (s *service) RegisterUser(ctx context.Context, email, password string) (*us
 
 	log := logger.WithContext(ctx)
 	email = strings.TrimSpace(strings.ToLower(email))
+
 	if len(email) == 0 || len(password) == 0 {
 		log.Warn("RegisterUser - email or password is empty")
-		return nil, fmt.Errorf("email or password is required")
+		return nil, user.ErrInvalidCredentials
 	}
 
 	exist, err := s.repo.IsEmailExists(ctx, email)
@@ -54,7 +57,7 @@ func (s *service) RegisterUser(ctx context.Context, email, password string) (*us
 	}
 	if exist {
 		log.Warn("RegisterUser - email already exists", zap.String("email", email))
-		return nil, fmt.Errorf("email already exists")
+		return nil, user.ErrEmailAlreadyExists
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), passwordCost)
@@ -98,12 +101,12 @@ func (s *service) LoginUser(ctx context.Context, email, password string) (*user.
 
 	if u.IsDeleted || !u.IsActive {
 		log.Warn("LoginUser - user inactive or deleted", zap.String("email", email))
-		return nil, fmt.Errorf("account is inactive or deleted")
+		return nil, user.ErrInactiveAccount
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		log.Warn("LoginUser - invalid password", zap.String("email", email))
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, user.ErrInvalidCredentials
 	}
 
 	log.Info("LoginUser - success", zap.String("user_id", u.ID.String()), zap.String("email", email))
@@ -117,6 +120,10 @@ func (s *service) FindByID(ctx context.Context, id string) (*user.User, error) {
 	log := logger.WithContext(ctx)
 	u, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("FindByID - user not found", zap.String("user_id", id))
+			return nil, user.ErrUserNotFound
+		}
 		log.Error("FindByID - failed", zap.String("user_id", id), zap.Error(err))
 		return nil, err
 	}
@@ -129,6 +136,10 @@ func (s *service) ResignUser(ctx context.Context, id string) error {
 
 	log := logger.WithContext(ctx)
 	if err := s.repo.SoftDelete(ctx, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("ResignUser - user not found", zap.String("user_id", id))
+			return user.ErrUserNotFound
+		}
 		log.Error("ResignUser - failed", zap.String("user_id", id), zap.Error(err))
 		return err
 	}
@@ -149,7 +160,7 @@ func (s *service) CheckPassword(ctx context.Context, id, password string) error 
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		log.Warn("CheckPassword - mismatch", zap.String("user_id", id))
-		return err
+		return user.ErrPasswordMismatch
 	}
 
 	return nil
@@ -200,12 +211,12 @@ func (s *service) UpdatePassword(ctx context.Context, id, currentPassword, newPa
 
 	if u.IsDeleted || !u.IsActive {
 		log.Warn("UpdatePassword - user inactive", zap.String("user_id", id))
-		return fmt.Errorf("cannot update inactive account")
+		return user.ErrInactiveAccount
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
 		log.Warn("UpdatePassword - current password mismatch", zap.String("user_id", id))
-		return fmt.Errorf("current password does not match")
+		return user.ErrPasswordMismatch
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), passwordCost)
@@ -238,7 +249,7 @@ func (s *service) DeleteUser(ctx context.Context, id string) error {
 
 	if u.IsDeleted {
 		log.Warn("DeleteUser - already deleted", zap.String("user_id", id))
-		return fmt.Errorf("account already deleted")
+		return user.ErrAlreadyDeleted
 	}
 
 	u.IsDeleted = true
