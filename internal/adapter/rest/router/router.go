@@ -48,7 +48,7 @@ func Run(ctx context.Context) {
 
 	registerUserHandler(api, handlerService)
 	registerMonitorHandler(api, handlerService)
-	registerLogHandler(api)
+	registerLogHandler(api, handlerService)
 
 	srv := &http.Server{
 		Addr:              ":8888",
@@ -71,30 +71,42 @@ func Run(ctx context.Context) {
 func registerUserHandler(api *gin.RouterGroup, handlerService *handler.Handler) {
 	auth := api.Group("/auth")
 
-	auth.POST("/signup", handlerService.SignupHandler)                              // 회원가입
-	auth.POST("/login", handlerService.LoginHandler)                                // 로그인
-	auth.GET("/me", middleware.AuthMiddleware(), handlerService.GetUserInfoHandler) // 로그인 정보 조회
-	auth.PUT("/me/nickname", middleware.AuthMiddleware(), handlerService.UpdateNicknameHandler)
-	auth.PUT("/me/password", middleware.AuthMiddleware(), handlerService.UpdatePasswordHandler)
-	auth.DELETE("/me/logout", middleware.AuthMiddleware(), handlerService.LogoutHandler) // 로그아웃
-	auth.DELETE("/me/resign", middleware.AuthMiddleware(), handlerService.ReSignHandler) // 회원 탈퇴 요청
-	auth.POST("/password", middleware.AuthMiddleware(), handlerService.CheckPassword)    // 비밀번호 검사
-	auth.GET("/duplicate", handlerService.DuplicateEmail)                                // 이메일 중복 검사
+	auth.POST("/signup", handlerService.SignupHandler)                                          // 회원가입
+	auth.POST("/login", handlerService.LoginHandler)                                            // 로그인
+	auth.GET("/me", middleware.AuthMiddleware(), handlerService.GetUserInfoHandler)             // 로그인 정보 조회
+	auth.PUT("/me/nickname", middleware.AuthMiddleware(), handlerService.UpdateNicknameHandler) //
+	auth.PUT("/me/password", middleware.AuthMiddleware(), handlerService.UpdatePasswordHandler) //
+	auth.DELETE("/me/logout", middleware.AuthMiddleware(), handlerService.LogoutHandler)        // 로그아웃
+	auth.DELETE("/me/resign", middleware.AuthMiddleware(), handlerService.ReSignHandler)        // 회원 탈퇴 요청
+	auth.POST("/password", middleware.AuthMiddleware(), handlerService.CheckPassword)           // 비밀번호 검사
+	auth.GET("/duplicate", handlerService.DuplicateEmail)                                       // 이메일 중복 검사
+
+	// 보안 기능 (추후 이메일 연동 시 구현)
+	// auth.POST("/forgot-password", handlerService.ForgotPasswordHandler) // 비밀번호 초기화 요청
 }
 
 func registerMonitorHandler(api *gin.RouterGroup, handlerService *handler.Handler) {
 	monitor := api.Group("/monitor")
 
-	monitor.GET("/:id", handlerService.GetMonitorHandler)       // 모니터링 주소 정보 조회
-	monitor.PUT("/:id", handlerService.UpdateMonitorHandler)    // 모니터링 주소 정보 수정
 	monitor.POST("", handlerService.RegisterMonitorHandler)     // 모니터링 주소 추가
-	monitor.DELETE("/:id", handlerService.RemoveMonitorHandler) // 모니터링 주소 삭제
-	monitor.GET("/list", handlerService.GetMonitorListHandler)  // 모니터링 주소 목록 조회
+	monitor.GET("/list", handlerService.GetMonitorListHandler)  // 모니터 목록 조회
+	monitor.GET("/:id", handlerService.GetMonitorHandler)       // 단일 모니터 조회
+	monitor.PUT("/:id", handlerService.UpdateMonitorHandler)    // 모니터 수정
+	monitor.DELETE("/:id", handlerService.RemoveMonitorHandler) // 모니터 삭제
+
+	// 추가된 기능들
+	monitor.PATCH("/:id/toggle", handlerService.ToggleMonitorHandler)      // 모니터 ON/OFF
+	monitor.POST("/:id/trigger", handlerService.TriggerMonitorHandler)     // 수동 검사 요청
+	monitor.GET("/protocols", handlerService.GetSupportedProtocolsHandler) // 지원 프로토콜 목록
 }
 
-func registerLogHandler(api *gin.RouterGroup) {
-	logg := api.Group("/log")
+func registerLogHandler(api *gin.RouterGroup, handlerService *handler.Handler) {
+	logg := api.Group("/log", middleware.AuthMiddleware())
 
-	logg.GET("/health") // 모니터링 헬스 기록 정보 조회
-	logg.GET("/status") // 모니터링 상태 기록 정보 조회
+	logg.GET("/status")                                                  // 상태 로그
+	logg.GET("/health")                                                  // 전체 헬스 로그
+	logg.GET("/health/:monitor_id", handlerService.GetHealthLogsHandler) // 모니터별 헬스 로그
+	// logg.GET("/health/:monitor_id/errors", handlerService.GetHealthErrorSummaryHandler)    // 실패 요약
+	// logg.GET("/health/:monitor_id/timeseries", handlerService.GetResponseTimeChartHandler) // 응답 시간 그래프
+	// logg.GET("/notifications/:monitor_id", handlerService.GetNotificationLogsHandler)      // 알림 이력
 }

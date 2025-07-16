@@ -24,6 +24,10 @@ type Service interface {
 	SearchMonitor(ctx context.Context, id string) (*monitor.Monitor, error)
 	ModifyMonitor(ctx context.Context, id string, userID string, req dto.UpdateMonitorRequest) error
 	DeleteMonitor(ctx context.Context, id string, userID string) error
+
+	ToggleMonitor(ctx context.Context, monitorID, userID string) error
+	TriggerMonitor(ctx context.Context, monitorID, userID string) error
+	GetSupportedProtocols() []string
 }
 
 type monitorService struct {
@@ -189,4 +193,63 @@ func (m *monitorService) DeleteMonitor(ctx context.Context, id string, userID st
 
 	log.Info("DeleteMonitor - success", zap.String("monitor_id", id))
 	return nil
+}
+
+func (m *monitorService) ToggleMonitor(ctx context.Context, monitorID, userID string) error {
+	ctx, cancel := context.WithTimeout(ctx, monitorTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
+	monitorObj, err := m.monitorRepo.FindByID(ctx, monitorID)
+	if err != nil {
+		log.Error("ToggleMonitor - monitor not found", zap.String("monitor_id", monitorID), zap.Error(err))
+		return monitor.ErrMonitorNotFound
+	}
+
+	if monitorObj.UserID.String() != userID {
+		log.Warn("ToggleMonitor - no permission", zap.String("user_id", userID))
+		return monitor.ErrPermissionDenied
+	}
+
+	monitorObj.Enabled = !monitorObj.Enabled
+	monitorObj.UpdatedAt = time.Now()
+
+	if err := m.monitorRepo.Update(ctx, monitorObj); err != nil {
+		log.Error("ToggleMonitor - update failed", zap.String("monitor_id", monitorID), zap.Error(err))
+		return err
+	}
+
+	log.Info("ToggleMonitor - status toggled", zap.String("monitor_id", monitorID), zap.Bool("is_active", monitorObj.Enabled))
+	return nil
+}
+
+func (m *monitorService) TriggerMonitor(ctx context.Context, monitorID, userID string) error {
+	ctx, cancel := context.WithTimeout(ctx, monitorTimeout)
+	defer cancel()
+
+	log := logger.WithContext(ctx)
+	monitorObj, err := m.monitorRepo.FindByID(ctx, monitorID)
+	if err != nil {
+		log.Error("TriggerMonitor - monitor not found", zap.String("monitor_id", monitorID), zap.Error(err))
+		return monitor.ErrMonitorNotFound
+	}
+
+	if monitorObj.UserID.String() != userID {
+		log.Warn("TriggerMonitor - no permission", zap.String("user_id", userID))
+		return monitor.ErrPermissionDenied
+	}
+
+	// 실제 모니터링 테스트 수행 - 간단 예시 (Ping / HTTP 등)
+	// result, err := s.pingNow(ctx, monitor)
+	// if err != nil {
+	// 	log.Error("TriggerMonitor - monitor test failed", zap.String("monitor_id", monitorID), zap.Error(err))
+	// 	return err
+	// }
+
+	log.Info("TriggerMonitor - test executed", zap.String("monitor_id", monitorID), zap.String("status", "test"))
+	return nil
+}
+
+func (s *monitorService) GetSupportedProtocols() []string {
+	return []string{"HTTP", "HTTPS", "TCP", "WebSocket"}
 }

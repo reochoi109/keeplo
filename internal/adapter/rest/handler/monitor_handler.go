@@ -8,6 +8,7 @@ import (
 	"keeplo/internal/domain/monitor"
 	"keeplo/pkg/logger"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -232,4 +233,118 @@ func (h *Handler) RemoveMonitorHandler(c *gin.Context) {
 
 	log.Info("RemoveMonitorHandler - success", zap.String("monitor_id", id), zap.String("user_id", userID.(string)))
 	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorDeleted, nil)
+}
+
+// ToggleMonitorHandler godoc
+//
+//	@Summary		모니터링 ON/OFF 전환
+//	@Description	모니터링 항목을 활성화 또는 비활성화합니다.
+//	@Tags			monitor
+//	@Accept			json
+//	@Produce		json
+//	@Param			id	path		string	true	"모니터 ID"
+//	@Success		200	{object}	dto.ResponseFormat
+//	@Failure		404	{object}	dto.ResponseFormat
+//	@Router			/monitor/{id}/toggle [patch]
+func (h *Handler) ToggleMonitorHandler(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
+	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	monitorID := c.Param("id")
+
+	log.Debug("ToggleMonitorHandler called", zap.String("monitor_id", monitorID))
+
+	if err := h.MonitorService.ToggleMonitor(ctx, monitorID, userID); err != nil {
+		switch err {
+		case monitor.ErrMonitorNotFound:
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorMonitorNotFound, nil)
+		case monitor.ErrPermissionDenied:
+			response.HandleResponse(c, http.StatusForbidden, response.ErrorUnauthorized, nil)
+		default:
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorUpdateFailed, nil)
+		}
+		return
+	}
+	response.HandleResponse(c, http.StatusOK, response.SuccessMonitorUpdated, nil)
+}
+
+// TriggerMonitorHandler godoc
+//
+//	@Summary		모니터링 수동 실행
+//	@Description	선택한 모니터링 항목을 즉시 테스트 실행합니다.
+//	@Tags			monitor
+//	@Produce		json
+//	@Param			id	path	string	true	"모니터 ID"
+//	@Success		200	{object}	dto.ResponseFormat
+//	@Failure		404	{object}	dto.ResponseFormat
+//	@Failure		403	{object}	dto.ResponseFormat
+//	@Failure		500	{object}	dto.ResponseFormat
+//	@Router			/monitor/{id}/trigger [post]
+func (h *Handler) TriggerMonitorHandler(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
+	userID := c.MustGet(middleware.ContextUserIDKey).(string)
+	monitorID := c.Param("id")
+	log.Debug("TriggerMonitorHandler called", zap.String("monitor_id", monitorID), zap.String("user_id", userID))
+
+	if err := h.MonitorService.TriggerMonitor(ctx, monitorID, userID); err != nil {
+		switch err {
+		case monitor.ErrMonitorNotFound:
+			response.HandleResponse(c, http.StatusNotFound, response.ErrorMonitorNotFound, nil)
+		case monitor.ErrPermissionDenied:
+			response.HandleResponse(c, http.StatusForbidden, response.ErrorUnauthorized, nil)
+		default:
+			response.HandleResponse(c, http.StatusInternalServerError, response.ErrorMonitorRegisterFailed, nil)
+		}
+		return
+	}
+	response.HandleResponse(c, http.StatusOK, response.Success, nil)
+}
+
+// GetSupportedProtocolsHandler godoc
+//
+//	@Summary		지원 프로토콜 조회
+//	@Description	서버에서 지원하는 모니터링 프로토콜 목록을 반환합니다.
+//	@Tags			monitor
+//	@Produce		json
+//	@Success		200	{object}	dto.ResponseFormat
+//	@Router			/monitor/protocols [get]
+func (h *Handler) GetSupportedProtocolsHandler(c *gin.Context) {
+	protocols := h.MonitorService.GetSupportedProtocols()
+	response.HandleResponse(c, http.StatusOK, response.Success, protocols)
+}
+
+// GetHealthLogsHandler godoc
+//
+//	@Summary		모니터 헬스 로그 조회
+//	@Description	특정 모니터의 헬스 체크 이력을 조회합니다.
+//	@Tags			log
+//	@Produce		json
+//	@Param			id		query		string	true	"모니터 ID"
+//	@Param			limit	query		int		false	"최대 조회 개수 (기본 50)"
+//	@Success		200		{object}	dto.ResponseFormat
+//	@Failure		400		{object}	dto.ResponseFormat
+//	@Failure		404		{object}	dto.ResponseFormat
+//	@Router			/log/health/{id} [get]
+func (h *Handler) GetHealthLogsHandler(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithContext(ctx)
+
+	monitorID := c.Query("id")
+	if monitorID == "" {
+		log.Warn("GetHealthLogsHandler - missing monitor ID")
+		response.HandleResponse(c, http.StatusBadRequest, response.ErrorBadRequest, nil)
+		return
+	}
+
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	log.Debug("GetHealthLogsHandler called", zap.String("monitor_id", monitorID), zap.Int("limit", limit))
+
 }

@@ -51,10 +51,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "object",
-                                            "additionalProperties": {
-                                                "type": "boolean"
-                                            }
+                                            "type": "boolean"
                                         }
                                     }
                                 }
@@ -316,14 +313,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
@@ -523,6 +526,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/monitor/protocols": {
+            "get": {
+                "description": "서버에서 지원하는 모니터링 프로토콜 목록을 반환합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "지원 프로토콜 조회",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
         "/monitor/{id}": {
             "get": {
                 "description": "특정 모니터링 항목의 상세 정보를 조회합니다.",
@@ -671,6 +694,91 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/monitor/{id}/toggle": {
+            "patch": {
+                "description": "모니터링 항목을 활성화 또는 비활성화합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "모니터링 ON/OFF 전환",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/monitor/{id}/trigger": {
+            "post": {
+                "description": "선택한 모니터링 항목을 즉시 테스트 실행합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitor"
+                ],
+                "summary": "모니터링 수동 실행",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.ResponseFormat"
                         }
