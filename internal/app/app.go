@@ -34,7 +34,7 @@ func Run() {
 	// go listenForShutdown(cancel)
 
 	scheduler.NewScheduler()
-	scheduler.AddQueue("health", scheduler.NewInMemoryQueue())
+	scheduler.AddQueue(ctx, "health", scheduler.NewInMemoryQueue())
 	start(ctx)
 }
 

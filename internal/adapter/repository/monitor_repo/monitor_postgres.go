@@ -86,6 +86,13 @@ func (r *GormMonitorRepo) Update(ctx context.Context, m *monitor.Monitor) error 
 		}).Error
 }
 
+func (r *GormMonitorRepo) WithTx(ctx context.Context, fn func(txRepo monitor.Repository) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := &GormMonitorRepo{db: tx}
+		return fn(txRepo)
+	})
+}
+
 func toEntity(m *MonitorGorm) *monitor.Monitor {
 	return &monitor.Monitor{
 		ID:              m.ID,

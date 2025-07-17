@@ -42,29 +42,39 @@ func (q *InMemoryQueue) Push(task *Task) error {
 
 func (q *InMemoryQueue) Pop(ctx context.Context) (*Task, error) {
 	q.mu.Lock()
-	defer q.mu.Unlock()
 
 	for {
 		if q.closed {
+			q.mu.Unlock()
 			return nil, fmt.Errorf("queue closed")
 		}
 
 		if q.queue.Len() == 0 {
-			q.cond.Wait()
-			continue
-		}
+			q.mu.Unlock()
 
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+				q.mu.Lock()
+				q.cond.Wait()
+				continue
+			}
+		}
 		task := q.queue.Peek()
 		now := time.Now()
 
+		// 아직 실행 시간이 안 됨 → unlock 후 wait
 		if task.NextCheckAt.After(now) {
 			wait := task.NextCheckAt.Sub(now)
-			timer := time.NewTimer(wait)
-
 			q.mu.Unlock()
+
+			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
-				timer.Stop()
+				if !timer.Stop() {
+					<-timer.C
+				}
 				return nil, ctx.Err()
 
 			case <-timer.C:
@@ -72,9 +82,9 @@ func (q *InMemoryQueue) Pop(ctx context.Context) (*Task, error) {
 				continue
 			}
 		}
-
 		item := heap.Pop(&q.queue).(*Task)
 		delete(q.taskMap, item.ID)
+		q.mu.Unlock()
 		return item, nil
 	}
 }

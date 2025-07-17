@@ -16,7 +16,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const monitorTimeout = time.Second * 5
+const (
+	monitorTimeout = time.Second * 5
+	TaskName       = "health"
+)
 
 type Service interface {
 	RegisterMonitor(ctx context.Context, userID string, req dto.RegisterMonitorRequest) error
@@ -56,6 +59,8 @@ func (m *monitorService) RegisterMonitor(ctx context.Context, userID string, req
 
 	target := fmt.Sprintf("%s://%s:%s", req.Type, req.Address, req.Port)
 	id := uuid.New()
+	now := time.Now()
+
 	newMonitor := &monitor.Monitor{
 		ID:              id,
 		UserID:          uuid.MustParse(userID),
@@ -68,26 +73,34 @@ func (m *monitorService) RegisterMonitor(ctx context.Context, userID string, req
 		UpdatedAt:       time.Now(),
 	}
 
-	// 1. DB 저장
-	if err := m.monitorRepo.Create(ctx, newMonitor); err != nil {
-		log.Error("RegisterMonitor - failed to create", zap.Error(err))
-		return err
-	}
+	// 트랜잭션 처리 시작
+	return m.monitorRepo.WithTx(ctx, func(txRepo monitor.Repository) error {
+		// 1. DB 저장
+		if err := txRepo.Create(ctx, newMonitor); err != nil {
+			log.Error("RegisterMonitor - failed to create", zap.Error(err))
+			return err
+		}
 
-	// 2. 스케줄러 등록
-	task := &scheduler.Task{
-		ID:          newMonitor.ID.String(),
-		Executor:    &MonitorExecutor{},
-		Interval:    time.Duration(newMonitor.IntervalSeconds) * time.Second,
-		NextCheckAt: time.Now().Add(time.Duration(newMonitor.IntervalSeconds) * time.Second),
-	}
-	if err := scheduler.RegisterTask(ctx, "health", task); err != nil {
-		log.Error("RegisterMonitor - failed to register scheduler", zap.Error(err))
-		return err
-	}
+		// 2. 스케줄러 등록
+		task := &scheduler.Task{
+			ID:          newMonitor.ID.String(),
+			Executor:    &MonitorExecutor{},
+			Payload:     newMonitor,
+			Interval:    time.Duration(newMonitor.IntervalSeconds) * time.Second,
+			NextCheckAt: now.Add(time.Duration(newMonitor.IntervalSeconds) * time.Second),
+		}
 
-	log.Info("RegisterMonitor - success", zap.String("monitor_id", id.String()), zap.String("user_id", userID))
-	return nil
+		if err := scheduler.RegisterTask(ctx, TaskName, task); err != nil {
+			log.Error("RegisterMonitor - scheduler register failed", zap.Error(err))
+			return fmt.Errorf("scheduler registration failed: %w", err)
+		}
+
+		log.Info("RegisterMonitor - success",
+			zap.String("monitor_id", id.String()),
+			zap.String("user_id", userID),
+		)
+		return nil
+	})
 }
 
 func (m *monitorService) SearchMonitorList(ctx context.Context, userID string) ([]*monitor.Monitor, error) {
@@ -135,41 +148,62 @@ func (m *monitorService) ModifyMonitor(ctx context.Context, id string, userID st
 	log := logger.WithContext(ctx)
 	log.Debug("ModifyMonitor - called", zap.String("monitor_id", id), zap.String("user_id", userID))
 
-	existing, err := m.monitorRepo.FindByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Warn("ModifyMonitor - not found", zap.String("monitor_id", id))
-			return monitor.ErrMonitorNotFound
+	return m.monitorRepo.WithTx(ctx, func(txRepo monitor.Repository) error {
+		// 1. 기존 모니터 조회
+		existing, err := txRepo.FindByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				log.Warn("ModifyMonitor - not found", zap.String("monitor_id", id))
+				return monitor.ErrMonitorNotFound
+			}
+			log.Error("ModifyMonitor - fetch failed", zap.Error(err))
+			return err
 		}
-		log.Error("ModifyMonitor - fetch failed", zap.Error(err))
-		return err
-	}
-	if existing.UserID.String() != userID {
-		log.Warn("ModifyMonitor - permission denied", zap.String("monitor_id", id), zap.String("user_id", userID))
-		return monitor.ErrPermissionDenied
-	}
 
-	if req.Name != nil {
-		existing.Name = *req.Name
-	}
-	if req.Type != nil {
-		existing.Type = *req.Type
-	}
-	if req.IntervalSeconds != nil {
-		existing.IntervalSeconds = *req.IntervalSeconds
-	}
-	if req.Address != nil && req.Port != nil && req.Type != nil {
-		existing.Target = fmt.Sprintf("%s://%s:%s", *req.Type, *req.Address, *req.Port)
-	}
-	existing.UpdatedAt = time.Now()
+		// 2. 권한 확인
+		if existing.UserID.String() != userID {
+			log.Warn("ModifyMonitor - permission denied", zap.String("monitor_id", id), zap.String("user_id", userID))
+			return monitor.ErrPermissionDenied
+		}
 
-	if err := m.monitorRepo.Update(ctx, existing); err != nil {
-		log.Error("ModifyMonitor - update failed", zap.Error(err))
-		return err
-	}
+		// 3. 값 수정
+		if req.Name != nil {
+			existing.Name = *req.Name
+		}
+		if req.Type != nil {
+			existing.Type = *req.Type
+		}
+		if req.IntervalSeconds != nil {
+			existing.IntervalSeconds = *req.IntervalSeconds
+		}
+		if req.Address != nil && req.Port != nil && req.Type != nil {
+			existing.Target = fmt.Sprintf("%s://%s:%s", *req.Type, *req.Address, *req.Port)
+		}
+		existing.UpdatedAt = time.Now()
 
-	log.Info("ModifyMonitor - success", zap.String("monitor_id", existing.ID.String()))
-	return nil
+		// 4. DB 반영
+		if err := txRepo.Update(ctx, existing); err != nil {
+			log.Error("ModifyMonitor - update failed", zap.Error(err))
+			return err
+		}
+
+		// 5. 스케줄러 Task 업데이트
+		next := time.Now().Add(time.Duration(existing.IntervalSeconds) * time.Second)
+		task := &scheduler.Task{
+			ID:          existing.ID.String(),
+			Executor:    &MonitorExecutor{},
+			Payload:     existing,
+			NextCheckAt: next,
+			Interval:    time.Duration(existing.IntervalSeconds) * time.Second,
+		}
+		if err := scheduler.UpdateTask(ctx, TaskName, task); err != nil {
+			log.Error("ModifyMonitor - scheduler update failed", zap.Error(err))
+			return fmt.Errorf("scheduler task update failed: %w", err)
+		}
+
+		log.Info("ModifyMonitor - success", zap.String("monitor_id", existing.ID.String()))
+		return nil
+	})
 }
 
 func (m *monitorService) DeleteMonitor(ctx context.Context, id string, userID string) error {
@@ -179,27 +213,35 @@ func (m *monitorService) DeleteMonitor(ctx context.Context, id string, userID st
 	log := logger.WithContext(ctx)
 	log.Debug("DeleteMonitor - called", zap.String("monitor_id", id), zap.String("user_id", userID))
 
-	monitorObj, err := m.monitorRepo.FindByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Warn("DeleteMonitor - not found", zap.String("monitor_id", id))
-			return monitor.ErrMonitorNotFound
+	return m.monitorRepo.WithTx(ctx, func(txRepo monitor.Repository) error {
+		// 1. 모니터 조회
+		monitorObj, err := txRepo.FindByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				log.Warn("DeleteMonitor - not found", zap.String("monitor_id", id))
+				return monitor.ErrMonitorNotFound
+			}
+			log.Error("DeleteMonitor - fetch failed", zap.Error(err))
+			return err
 		}
-		log.Error("DeleteMonitor - fetch failed", zap.Error(err))
-		return err
-	}
-	if monitorObj.UserID.String() != userID {
-		log.Warn("DeleteMonitor - permission denied", zap.String("monitor_id", id), zap.String("user_id", userID))
-		return monitor.ErrPermissionDenied
-	}
 
-	if err := m.monitorRepo.SoftDelete(ctx, id); err != nil {
-		log.Error("DeleteMonitor - soft delete failed", zap.Error(err))
-		return err
-	}
+		// 2. 권한 확인
+		if monitorObj.UserID.String() != userID {
+			log.Warn("DeleteMonitor - permission denied", zap.String("monitor_id", id), zap.String("user_id", userID))
+			return monitor.ErrPermissionDenied
+		}
 
-	log.Info("DeleteMonitor - success", zap.String("monitor_id", id))
-	return nil
+		// 3. DB Soft Delete
+		if err := txRepo.SoftDelete(ctx, id); err != nil {
+			log.Error("DeleteMonitor - soft delete failed", zap.Error(err))
+			return err
+		}
+
+		// 4. 스케줄러 Task 제거
+		scheduler.RemoveTask(TaskName, id)
+		log.Info("DeleteMonitor - success", zap.String("monitor_id", id))
+		return nil
+	})
 }
 
 func (m *monitorService) ToggleMonitor(ctx context.Context, monitorID, userID string) error {
@@ -207,27 +249,49 @@ func (m *monitorService) ToggleMonitor(ctx context.Context, monitorID, userID st
 	defer cancel()
 
 	log := logger.WithContext(ctx)
-	monitorObj, err := m.monitorRepo.FindByID(ctx, monitorID)
-	if err != nil {
-		log.Error("ToggleMonitor - monitor not found", zap.String("monitor_id", monitorID), zap.Error(err))
-		return monitor.ErrMonitorNotFound
-	}
 
-	if monitorObj.UserID.String() != userID {
-		log.Warn("ToggleMonitor - no permission", zap.String("user_id", userID))
-		return monitor.ErrPermissionDenied
-	}
+	// 트랜잭션 시작
+	return m.monitorRepo.WithTx(ctx, func(txRepo monitor.Repository) error {
+		monitorObj, err := txRepo.FindByID(ctx, monitorID)
+		if err != nil {
+			log.Error("ToggleMonitor - monitor not found", zap.String("monitor_id", monitorID), zap.Error(err))
+			return monitor.ErrMonitorNotFound
+		}
+		if monitorObj.UserID.String() != userID {
+			log.Warn("ToggleMonitor - no permission", zap.String("user_id", userID))
+			return monitor.ErrPermissionDenied
+		}
 
-	monitorObj.Enabled = !monitorObj.Enabled
-	monitorObj.UpdatedAt = time.Now()
+		// 상태 반전
+		monitorObj.Enabled = !monitorObj.Enabled
+		monitorObj.UpdatedAt = time.Now()
 
-	if err := m.monitorRepo.Update(ctx, monitorObj); err != nil {
-		log.Error("ToggleMonitor - update failed", zap.String("monitor_id", monitorID), zap.Error(err))
-		return err
-	}
+		// DB 업데이트
+		if err := txRepo.Update(ctx, monitorObj); err != nil {
+			log.Error("ToggleMonitor - update failed", zap.String("monitor_id", monitorID), zap.Error(err))
+			return err
+		}
 
-	log.Info("ToggleMonitor - status toggled", zap.String("monitor_id", monitorID), zap.Bool("is_active", monitorObj.Enabled))
-	return nil
+		// 스케줄러 처리
+		if monitorObj.Enabled {
+			task := &scheduler.Task{
+				ID:          monitorObj.ID.String(),
+				Executor:    &MonitorExecutor{},
+				Payload:     monitorObj,
+				Interval:    time.Duration(monitorObj.IntervalSeconds) * time.Second,
+				NextCheckAt: time.Now().Add(time.Duration(monitorObj.IntervalSeconds) * time.Second),
+			}
+			if err := scheduler.RegisterTask(ctx, TaskName, task); err != nil {
+				log.Error("ToggleMonitor - scheduler register failed", zap.Error(err))
+				return fmt.Errorf("failed to register monitor to scheduler: %w", err)
+			}
+		} else {
+			scheduler.RemoveTask(TaskName, monitorID)
+		}
+
+		log.Info("ToggleMonitor - status toggled", zap.String("monitor_id", monitorID), zap.Bool("is_active", monitorObj.Enabled))
+		return nil
+	})
 }
 
 func (m *monitorService) TriggerMonitor(ctx context.Context, monitorID, userID string) error {

@@ -25,7 +25,7 @@ func NewScheduler() {
 	}
 }
 
-func AddQueue(name string, queue TaskQueue) {
+func AddQueue(ctx context.Context, name string, queue TaskQueue) {
 	Scheduler.lock.Lock()
 	defer Scheduler.lock.Unlock()
 
@@ -36,14 +36,14 @@ func AddQueue(name string, queue TaskQueue) {
 	}
 	Scheduler.queues[name] = queue
 	log.Info("Queue added to scheduler", zap.String("queue", name))
-	go startQueueWorker(name, queue)
+	go startQueueWorker(ctx, name, queue)
 }
 
-// 큐에 Task 등록
 func RegisterTask(ctx context.Context, queueName string, task *Task) error {
-	Scheduler.lock.RLock()
+	Scheduler.lock.Lock()
+	defer Scheduler.lock.Unlock()
+
 	queue, ok := Scheduler.queues[queueName]
-	Scheduler.lock.RUnlock()
 	log := logger.Log
 	if !ok {
 		log.Error("Queue not found", zap.String("queue", queueName))
@@ -59,19 +59,17 @@ func RegisterTask(ctx context.Context, queueName string, task *Task) error {
 	return nil
 }
 
-// 업데이트
 func UpdateTask(ctx context.Context, queueName string, updated *Task) error {
-	log := logger.WithContext(ctx)
 	Scheduler.lock.Lock()
+	defer Scheduler.lock.Unlock()
+	log := logger.WithContext(ctx)
 	queue, ok := Scheduler.queues[queueName]
-	Scheduler.lock.Unlock()
 
 	if !ok {
 		log.Error("Queue not found", zap.String("queue", queueName))
 		return ErrQueueNotFound
 	}
 
-	// update task는 NextCheckAt만 갱신하므로 다른 필드는 remove -> Push 방식으로 처리
 	queue.RemoveTask(updated.ID)
 	if err := queue.Push(updated); err != nil {
 		log.Error("Failed to update task", zap.String("task_id", updated.ID), zap.Error(err))
@@ -82,37 +80,46 @@ func UpdateTask(ctx context.Context, queueName string, updated *Task) error {
 	return nil
 }
 
-// Task 제거
 func RemoveTask(queueName, taskID string) {
-	Scheduler.lock.RLock()
-	queue, ok := Scheduler.queues[queueName]
-	Scheduler.lock.RUnlock()
+	Scheduler.lock.Lock()
+	defer Scheduler.lock.Unlock()
 	log := logger.Log
+
+	queue, ok := Scheduler.queues[queueName]
+	if queue == nil {
+		log.Warn("Queue object is nil", zap.String("queue", queueName))
+		return
+	}
+
 	if !ok {
 		log.Warn("Queue not found when removing task", zap.String("queue", queueName))
 		return
 	}
-
 	queue.RemoveTask(taskID)
 	log.Info("Task removed from queue", zap.String("task_id", taskID), zap.String("queue", queueName))
 }
 
 // 각 큐별 고루틴 루프
-func startQueueWorker(queueName string, queue TaskQueue) {
-	ctx := context.Background()
+func startQueueWorker(ctx context.Context, queueName string, queue TaskQueue) {
 	log := logger.Log
 	for {
-		task, err := queue.Pop(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				log.Info("Queue shutting down", zap.String("queue", queueName))
-				return
+		select {
+		case <-ctx.Done():
+			log.Info("Queue shutting down (context cancelled)", zap.String("queue", queueName))
+			return
+		default:
+			task, err := queue.Pop(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					log.Info("Queue shutting down (context error)", zap.String("queue", queueName))
+					return
+				}
+				log.Error("Queue pop error", zap.String("queue", queueName), zap.Error(err))
+				time.Sleep(500 * time.Millisecond)
+				continue
 			}
-			log.Error("Queue pop error", zap.String("queue", queueName), zap.Error(err))
-			time.Sleep(500 * time.Millisecond)
-			continue
+			go handleTask(queueName, task)
 		}
-		go handleTask(queueName, task)
 	}
 }
 
