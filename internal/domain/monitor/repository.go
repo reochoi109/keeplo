@@ -9,6 +9,5 @@ type Repository interface {
 	FindByID(ctx context.Context, id string) (*Monitor, error)
 	SoftDelete(ctx context.Context, id string) error
 	HardDelete(ctx context.Context, id string) error
-
 	WithTx(ctx context.Context, fn func(txRepo Repository) error) error
 }
