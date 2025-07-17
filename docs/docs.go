@@ -426,6 +426,224 @@ const docTemplate = `{
                 }
             }
         },
+        "/log/health/{monitor_id}": {
+            "get": {
+                "description": "특정 모니터의 헬스 체크 이력을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "모니터 헬스 로그 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터 ID",
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지당 항목 수 (기본 50)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "시작 위치 오프셋 (기본 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/log/health/{monitor_id}/errors": {
+            "get": {
+                "description": "특정 모니터의 실패 응답 요약을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "헬스 체크 실패 요약",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터 ID",
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "조회 시작 시각 (RFC3339 형식, 예: 2025-07-17T00:00:00Z)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "조회 종료 시각 (RFC3339 형식, 예: 2025-07-17T23:59:59Z)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "특정 상태코드 필터 (예: 500)",
+                        "name": "status_code",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/log/health/{monitor_id}/timeseries": {
+            "get": {
+                "description": "특정 모니터의 응답 시간 차트를 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "응답 시간 시계열 데이터",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터 ID",
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
+        "/log/notifications/{monitor_id}": {
+            "get": {
+                "description": "특정 모니터의 알림 발송 이력을 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "log"
+                ],
+                "summary": "알림 전송 이력",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "모니터 ID",
+                        "name": "monitor_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ResponseFormat"
+                        }
+                    }
+                }
+            }
+        },
         "/monitor": {
             "get": {
                 "description": "사용자가 등록한 모든 모니터링 항목을 조회합니다.",

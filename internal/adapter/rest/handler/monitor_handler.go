@@ -8,7 +8,6 @@ import (
 	"keeplo/internal/domain/monitor"
 	"keeplo/pkg/logger"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -314,37 +313,4 @@ func (h *Handler) TriggerMonitorHandler(c *gin.Context) {
 func (h *Handler) GetSupportedProtocolsHandler(c *gin.Context) {
 	protocols := h.MonitorService.GetSupportedProtocols()
 	response.HandleResponse(c, http.StatusOK, response.Success, protocols)
-}
-
-// GetHealthLogsHandler godoc
-//
-//	@Summary		모니터 헬스 로그 조회
-//	@Description	특정 모니터의 헬스 체크 이력을 조회합니다.
-//	@Tags			log
-//	@Produce		json
-//	@Param			id		query		string	true	"모니터 ID"
-//	@Param			limit	query		int		false	"최대 조회 개수 (기본 50)"
-//	@Success		200		{object}	dto.ResponseFormat
-//	@Failure		400		{object}	dto.ResponseFormat
-//	@Failure		404		{object}	dto.ResponseFormat
-//	@Router			/log/health/{id} [get]
-func (h *Handler) GetHealthLogsHandler(c *gin.Context) {
-	ctx := c.Request.Context()
-	log := logger.WithContext(ctx)
-
-	monitorID := c.Query("id")
-	if monitorID == "" {
-		log.Warn("GetHealthLogsHandler - missing monitor ID")
-		response.HandleResponse(c, http.StatusBadRequest, response.ErrorBadRequest, nil)
-		return
-	}
-
-	limit := 50
-	if l := c.Query("limit"); l != "" {
-		if v, err := strconv.Atoi(l); err == nil && v > 0 {
-			limit = v
-		}
-	}
-	log.Debug("GetHealthLogsHandler called", zap.String("monitor_id", monitorID), zap.Int("limit", limit))
-
 }

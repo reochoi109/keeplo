@@ -103,10 +103,18 @@ func registerMonitorHandler(api *gin.RouterGroup, handlerService *handler.Handle
 func registerLogHandler(api *gin.RouterGroup, handlerService *handler.Handler) {
 	logg := api.Group("/log", middleware.AuthMiddleware())
 
-	logg.GET("/status")                                                  // 상태 로그
-	logg.GET("/health")                                                  // 전체 헬스 로그
-	logg.GET("/health/:monitor_id", handlerService.GetHealthLogsHandler) // 모니터별 헬스 로그
-	// logg.GET("/health/:monitor_id/errors", handlerService.GetHealthErrorSummaryHandler)    // 실패 요약
-	// logg.GET("/health/:monitor_id/timeseries", handlerService.GetResponseTimeChartHandler) // 응답 시간 그래프
-	// logg.GET("/notifications/:monitor_id", handlerService.GetNotificationLogsHandler)      // 알림 이력
+	// [1] 모니터 헬스 로그 전체 조회 (리스트, 필터 포함 가능)
+	logg.GET("/health/:monitor_id", handlerService.GetMonitorHealthLogHandler)
+
+	// [2] 실패 요약 (예: 에러 빈도, 마지막 실패 등)
+	logg.GET("/health/:monitor_id/errors", handlerService.GetHealthErrorSummaryHandler)
+
+	// [3] 응답 시간 시계열 데이터 (차트용)
+	logg.GET("/health/:monitor_id/timeseries", handlerService.GetResponseTimeChartHandler)
+
+	// [4] 차트
+	logg.GET("/health/:monitor_id/timeseries", handlerService.GetResponseTimeChartHandler)
+
+	// [5] 알림 전송 이력 (예: 이메일/슬랙 등)
+	// logg.GET("/notifications/:monitor_id", handlerService.GetNotificationLogsHandler)
 }
