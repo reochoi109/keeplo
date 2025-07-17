@@ -2,6 +2,8 @@ package dto
 
 import (
 	"keeplo/internal/domain/monitor"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -91,4 +93,38 @@ func ToMonitorResponse(m *monitor.Monitor) MonitorResponse {
 		CreatedAt:       m.CreatedAt.String(),
 		UpdatedAt:       m.UpdatedAt.String(),
 	}
+}
+
+// parseInterval converts strings like "5m", "1h" into time.Duration
+func ParseInterval(s string) (time.Duration, error) {
+	if strings.HasSuffix(s, "m") {
+		v := strings.TrimSuffix(s, "m")
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n) * time.Minute, nil
+	}
+	if strings.HasSuffix(s, "h") {
+		v := strings.TrimSuffix(s, "h")
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n) * time.Hour, nil
+	}
+	if strings.HasSuffix(s, "s") {
+		v := strings.TrimSuffix(s, "s")
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n) * time.Second, nil
+	}
+	// 기본 분 단위 처리
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(n) * time.Minute, nil
 }

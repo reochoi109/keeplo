@@ -5,8 +5,6 @@ import (
 	"keeplo/internal/adapter/rest/response"
 	"keeplo/pkg/logger"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -197,7 +195,7 @@ func (h *Handler) GetResponseTimeChartHandler(c *gin.Context) {
 	}
 	interval := 5 * time.Minute
 	if req.Interval != "" {
-		dur, err := parseInterval(req.Interval)
+		dur, err := dto.ParseInterval(req.Interval)
 		if err != nil {
 			log.Warn("GetResponseTimeChartHandler - invalid interval", zap.Error(err))
 			response.HandleResponse(c, http.StatusBadRequest, response.ErrorValidationFailed, nil)
@@ -265,37 +263,3 @@ func (h *Handler) GetResponseTimeChartHandler(c *gin.Context) {
 // 	}
 // 	response.HandleResponse(c, http.StatusOK, response.Success, logs)
 // }
-
-// parseInterval converts strings like "5m", "1h" into time.Duration
-func parseInterval(s string) (time.Duration, error) {
-	if strings.HasSuffix(s, "m") {
-		v := strings.TrimSuffix(s, "m")
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return 0, err
-		}
-		return time.Duration(n) * time.Minute, nil
-	}
-	if strings.HasSuffix(s, "h") {
-		v := strings.TrimSuffix(s, "h")
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return 0, err
-		}
-		return time.Duration(n) * time.Hour, nil
-	}
-	if strings.HasSuffix(s, "s") {
-		v := strings.TrimSuffix(s, "s")
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return 0, err
-		}
-		return time.Duration(n) * time.Second, nil
-	}
-	// 기본 분 단위 처리
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return 0, err
-	}
-	return time.Duration(n) * time.Minute, nil
-}
